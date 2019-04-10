@@ -1,0 +1,106 @@
+#include <stdio.h>
+#include <string.h>
+#include <inttypes.h>
+#include <radpool.h>
+
+#include "machine.h"
+#include "stream.h"
+#include "filter.h"
+
+struct generic_counter_t {
+    uint64_t total;
+    uint64_t limit;
+    uint64_t period;
+};
+
+static int
+byte_count_limiter(IO_FILTER_ARGS)
+{
+    IOF_DISABLED();
+    int ret = CALL_NEXT_FILTER();
+
+    if (ret != IO_SUCCESS) {
+        printf("NO SUCCESS\n");
+        return ret;
+    }
+
+    // If initialized improperly, just return status
+    if (!IO_FILTER_ARGS_FILTER->obj) {
+        return ret;
+    }
+
+    // Access internal struct
+    struct generic_counter_t *limit = (struct generic_counter_t *)IO_FILTER_ARGS_FILTER->obj;
+
+    // Count bytes, and return COMPLETE if the limit is reached
+    limit->total += *IO_FILTER_ARGS_BYTES;
+    if (limit->total >= limit->limit) {
+        return IO_COMPLETE;
+    }
+
+    return ret;
+}
+
+struct io_filter_t *
+create_byte_count_limit_filter(void *alloc, const char *name, uint64_t byte_limit)
+{
+    struct io_filter_t *f = create_filter(alloc, name, byte_count_limiter);
+    struct generic_counter_t *limit = palloc(alloc, sizeof(struct generic_counter_t));
+    limit->total = 0;
+    limit->limit = byte_limit;
+    f->obj = limit;
+    return f;
+}
+
+int
+byte_counter(IO_FILTER_ARGS)
+{
+    IOF_DISABLED();
+    int ret = CALL_NEXT_FILTER();
+
+    // If initialized improperly, just return status
+    if (!IO_FILTER_ARGS_FILTER->obj) {
+        return ret;
+    }
+
+    // Access internal struct
+    struct generic_counter_t *limit = (struct generic_counter_t *)IO_FILTER_ARGS_FILTER->obj;
+
+    // Count bytes, and return COMPLETE if the limit is reached
+    limit->total += *IO_FILTER_ARGS_BYTES;
+    if (limit->total >= limit->limit) {
+        printf("%" PRIu64 "MB Processed\n", limit->total/(1024*1024));
+        limit->limit += limit->period;
+    }
+
+    return ret;
+}
+
+struct io_filter_t *
+create_byte_counter_filter(void *alloc, const char *name, uint64_t bytes_per_sample)
+{
+    struct io_filter_t *f = create_filter(alloc, name, byte_counter);
+    struct generic_counter_t *limit = palloc(alloc, sizeof(struct generic_counter_t));
+    limit->total = 0;
+    limit->period = bytes_per_sample;
+    limit->limit = bytes_per_sample;
+    f->obj = limit;
+    return f;
+}
+
+
+int
+dump_to_binfile(IO_FILTER_ARGS)
+{
+    IOF_DISABLED();
+    int ret = CALL_NEXT_FILTER();
+
+    static __thread FILE *outfile = NULL; 
+    if (!outfile) {
+        char filename[64];
+        snprintf(filename, 64, "test_data_%s", stream_name);
+        outfile = fopen(filename, "wb");
+    }
+    uint64_t bytes_written = fwrite(IO_FILTER_ARGS_BUF, sizeof(uint8_t), *IO_FILTER_ARGS_BYTES, outfile);
+    return ret;
+}
