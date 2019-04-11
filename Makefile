@@ -3,7 +3,7 @@ BUILD_CONFIG=x86_64.gcc
 include tools.mk
 
 HDR_DIR = bingewatch
-LIB = lbingewatch
+LIB = libbingewatch
 VERSION = 1.0.0
 SO_VERSION = 0
 LIBFILE=$(LIB).so.$(VERSION)
