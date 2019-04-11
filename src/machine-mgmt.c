@@ -56,7 +56,7 @@ machine_register(const char *name)
     }
     
     // Check for name
-    IOM *iom = get_iom(name);
+    IOM *iom = get_machine(name);
     if (iom) {
         printf("ERROR: io machine \"%s\" already exists.", name);
         return NULL;
@@ -100,7 +100,7 @@ request_handle(IOM *machine)
 }
 
 void
-iom_cleanup()
+machine_cleanup()
 {
     int i = 0;   
     for (; i < handle_count; i++) {
