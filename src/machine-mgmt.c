@@ -22,7 +22,7 @@ static IOM **machines = NULL;
 static POOL *bingewatch_pool = NULL;
 
 IOM *
-get_iom(const char *name)
+get_machine(const char *name)
 {
     int i;
     for (i = 0; i < machine_count; i++) {
@@ -35,7 +35,7 @@ get_iom(const char *name)
 }
 
 const IOM *
-get_iom_ref(IO_HANDLE handle)
+get_machine_ref(IO_HANDLE handle)
 {
     int i;
     for (i = 0; i < handle_count; i++) {
@@ -48,7 +48,7 @@ get_iom_ref(IO_HANDLE handle)
 }
 
 IOM *
-iom_register(const char *name)
+machine_register(const char *name)
 {
     // Init master pool
     if (!bingewatch_pool) {
