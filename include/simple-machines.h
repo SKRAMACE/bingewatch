@@ -38,6 +38,12 @@ void sockiom_update_defaults(struct sockiom_args *s);
 
 
 /***** FILE MACHINE *****/
+enum filetype_e
+{
+    FILETYPE_TEXT=0,
+    FILETYPE_BINARY,
+};
+
 // ARG STRUCTS
 struct fileiom_args {
     char *fname;
