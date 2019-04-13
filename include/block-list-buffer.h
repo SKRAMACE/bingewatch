@@ -52,5 +52,5 @@ struct io_desc *blb_get_read_desc(IO_HANDLE h);
 struct io_desc *blb_get_write_desc(IO_HANDLE h);
 int blb_write(IO_HANDLE h, void *buf, uint64_t *len);
 int blb_read(IO_HANDLE h, void *buf, uint64_t *len);
-
+void blb_init_machine_functions(IOM *machine);
 #endif

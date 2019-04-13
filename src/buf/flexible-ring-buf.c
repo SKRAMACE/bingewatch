@@ -377,17 +377,7 @@ get_rb_machine()
         machine->create = create_buffer;
         machine->destroy = destroy_rb_machine;
 
-        // Generic Block List Buffer Functions
-        machine->stop = machine_no_op;
-        machine->lock = blb_lock;
-        machine->unlock = blb_unlock;
-        machine->get_read_desc = blb_get_read_desc;
-        machine->get_write_desc = blb_get_write_desc;
-        machine->read = blb_read;
-        machine->write = blb_write;
-
-        machine->obj = NULL;
-        machine->buf_size_rec = 1*MB;
+        blb_init_machine_functions(machine);
 
         ring_buffer_machine = machine;
     }

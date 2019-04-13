@@ -6,6 +6,32 @@
 #include "radpool.h"
 #include "machine.h"
 
+#define DECLARE_CREATE_NOIMPL \
+static IO_HANDLE create_noimpl(void *arg) { \
+    fprintf(stderr, "ERROR: Machine function \"create\" was not implemented"); \
+}
+#define CREATE_NOIMPL create_noimpl
+
+#define DECLARE_NOIMPL(name) \
+static void name##_noimpl(IO_HANDLE h) { \
+    fprintf(stderr, "ERROR: Machine function \"" #name "\" was not implemented"); \
+}
+#define NOIMPL(name) name##_noimpl
+
+#define DECLARE_IO_NOIMPL(name) \
+static int name##_noimpl(IO_HANDLE h, void *buf, uint64_t *len) { \
+    fprintf(stderr, "ERROR: Machine function \"" #name "\" was not implemented"); \
+}
+#define IO_NOIMPL(name) name##_noimpl
+
+DECLARE_CREATE_NOIMPL
+DECLARE_IO_NOIMPL(read)
+DECLARE_IO_NOIMPL(write)
+DECLARE_NOIMPL(destroy)
+DECLARE_NOIMPL(lock)
+DECLARE_NOIMPL(unlock)
+DECLARE_NOIMPL(stop)
+
 // Map handles to machine pointers
 #define MACHINE_CHUNK 0x100
 static int handle_count = 0;
@@ -56,25 +82,41 @@ machine_register(const char *name)
     }
     
     // Check for name
-    IOM *iom = get_machine(name);
-    if (iom) {
+    IOM *machine = get_machine(name);
+    if (machine) {
         printf("ERROR: io machine \"%s\" already exists.", name);
         return NULL;
     }
 
-    // New machine
-    iom = (IOM*)palloc(bingewatch_pool, sizeof(IOM));
-    iom->alloc = create_subpool(bingewatch_pool);
-    iom->name = (char *)palloc(iom->alloc, strlen(name) + 1);
-    strcpy(iom->name, name);
-    iom->obj = NULL;
+    // Create machine
+    machine = (IOM*)pcalloc(bingewatch_pool, sizeof(IOM));
+
+    // Create memory pool for machine
+    machine->alloc = create_subpool(bingewatch_pool);
+    // Set name
+    machine->name = (char *)palloc(machine->alloc, strlen(name) + 1);
+    strcpy(machine->name, name);
+    
+    // Set generic functions
+    machine->create  = CREATE_NOIMPL;
+    machine->read    = IO_NOIMPL(read);
+    machine->write   = IO_NOIMPL(write);
+    machine->stop    = NOIMPL(stop);
+    machine->lock    = NOIMPL(lock);
+    machine->unlock  = NOIMPL(unlock);
+    machine->destroy = NOIMPL(destroy);
+
+    machine->get_read_desc  = get_read_desc;
+    machine->get_write_desc = get_write_desc;
+
+    machine->buf_size_rec = 1*MB;
 
     // Track new machine 
     machine_count++;
     machines = (IOM**)repalloc(machines, machine_count * sizeof(IOM*), bingewatch_pool);
-    machines[machine_count - 1] = iom;
+    machines[machine_count - 1] = machine;
 
-    return iom;
+    return machine;
 }
 
 IO_HANDLE

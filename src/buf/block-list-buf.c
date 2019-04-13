@@ -320,3 +320,14 @@ blb_write(IO_HANDLE h, void *buf, uint64_t *len)
 
     return status;
 }
+
+void
+blb_init_machine_functions(IOM *machine)
+{
+    machine->lock = blb_lock;
+    machine->unlock = blb_unlock;
+    machine->get_read_desc = blb_get_read_desc;
+    machine->get_write_desc = blb_get_write_desc;
+    machine->read = blb_read;
+    machine->write = blb_write;
+}

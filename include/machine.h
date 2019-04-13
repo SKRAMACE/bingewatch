@@ -72,7 +72,6 @@ int machine_desc_read(IO_HANDLE h, void *buf, uint64_t *len);
 int machine_desc_write(IO_HANDLE h, void *buf, uint64_t *len);
 void machine_disable_write(IO_HANDLE h);
 void machine_disable_read(IO_HANDLE h);
-void machine_no_op(IO_HANDLE h);
 
 /***** Using Machines *****/
 typedef struct bw_machine {

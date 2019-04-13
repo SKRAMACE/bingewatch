@@ -204,8 +204,3 @@ machine_disable_write(IO_HANDLE h)
     
 }
 
-void
-machine_no_op(IO_HANDLE h)
-{
-    return;
-}
