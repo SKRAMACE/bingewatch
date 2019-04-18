@@ -145,6 +145,7 @@ add_read_filter(IO_HANDLE h, struct io_filter_t *addme)
         f->direction = IOF_READ;
         f = f->next;
     }
+    addme->direction = IOF_READ;
 
     // Get write filter from IOM write descriptor
     const IOM *machine = get_machine_ref(h);
@@ -169,6 +170,7 @@ add_write_filter(IO_HANDLE h, struct io_filter_t *addme)
         f->direction = IOF_WRITE;
         f = f->next;
     }
+    addme->direction = IOF_WRITE;
 
     // Get write filter from IOM write descriptor
     const IOM *machine = get_machine_ref(h);
