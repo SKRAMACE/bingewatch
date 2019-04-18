@@ -84,6 +84,7 @@ struct io_segment_t {
     // State machine
     const enum sq_state_e *const state;  // Pointer to stream state
     char running;                        // This controls the main loop.  TODO: This should be handled by the actual state
+    char no_data;
 
     // Seg Management
     IO_SEGMENT id;              // Handle for this segment
@@ -165,6 +166,19 @@ join_stream_segments(struct io_stream_t *stream)
     while (seg) {
         pthread_join(seg->thread, NULL);
         seg = seg->next;
+    }
+}
+
+static void
+flush_stream_segments(struct io_stream_t *stream)
+{
+    struct io_segment_t *seg = stream->segments;
+    while (seg) {
+        if (seg->no_data || !seg->running) {
+            seg = seg->next;
+        } else {
+            seg = stream->segments;
+        }
     }
 }
 
@@ -261,8 +275,7 @@ main_state_machine(void *args)
 
     // Wait for segments to complete final transactions
     if (SQ_FINISHING == st->state) {
-        // TODO: Query the segments until they are all empty
-        sleep(1);
+        flush_stream_segments(st);
     }
 
     set_state(st, SQ_DONE);
@@ -360,7 +373,7 @@ read_from_source(const IOM *src, struct io_segment_t *seg, char *buf, uint64_t *
         return SEG_CTRL_TOP;
     }
 
-    if (0 == bytes) {
+    if (0 == *bytes) {
         return SEG_CTRL_TOP;
     }
 
@@ -400,7 +413,8 @@ write_to_dest(const IOM *dst, int out_index, struct io_segment_t *seg, char *buf
     char *ptr = buf;
 
     while (remaining) {
-        enum io_status status = dst->write(out, ptr, bytes);
+        uint64_t _bytes = remaining;
+        enum io_status status = dst->write(out, ptr, &_bytes);
         switch (status) {
         case IO_SUCCESS:
             break;
@@ -416,9 +430,9 @@ write_to_dest(const IOM *dst, int out_index, struct io_segment_t *seg, char *buf
             return SEG_CTRL_TOP;
         }
 
-        remaining -= *bytes;
-        ptr += *bytes;
-        wr_bytes += *bytes;
+        remaining -= _bytes;
+        ptr += _bytes;
+        wr_bytes += _bytes;
     }
 
     // Calculate output metrics
@@ -452,7 +466,7 @@ generic_stream_segment(void *arg)
 
     /* Initialization */
     POOL *pool = create_pool();
-    char *buf = pcalloc(pool, buflen);
+    char *buf = palloc(pool, buflen);
     if (!buf) {
         fprintf(stderr, "ERROR: Failed to allocate segment buffer.\n");
         set_state(seg->stream, SQ_ERROR);
@@ -490,8 +504,10 @@ generic_stream_segment(void *arg)
         bytes = buflen;
 
         if (SEG_CTRL_TOP == read_from_source(src, seg, buf, &bytes)) {
+            seg->no_data = 1;
             continue;
         }
+        seg->no_data = 0;
 
         uint64_t src_bytes = bytes;
         if (SEG_CTRL_TOP == write_to_dest(dst, 0, seg, buf, &bytes)) {
