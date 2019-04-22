@@ -47,6 +47,8 @@ typedef struct io_filter_t {
 #define IO_FILTER_ARGS_BLOCK _iof_block
 #define IO_FILTER_ARGS_ALIGN _iof_align
 
+#define PASS_IO_FILTER_ARGS _iof_filter, _iof_buf, _iof_bytes, _iof_block, _iof_align
+
 // If the filter is disabled, skip to next filter
 #define IOF_DISABLED() if (!_iof_filter->enabled) { return CALL_NEXT_FILTER(); }
 
