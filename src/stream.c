@@ -430,6 +430,13 @@ write_to_dest(const IOM *dst, int out_index, struct io_segment_t *seg, char *buf
             return SEG_CTRL_TOP;
         }
 
+        if (_bytes > remaining) {
+            printf("Segment %s counter error\n", dst->name);
+            callback_error(seg->stream);
+            stop_segment(seg);
+            return SEG_CTRL_TOP;
+        }
+
         remaining -= _bytes;
         ptr += _bytes;
         wr_bytes += _bytes;
