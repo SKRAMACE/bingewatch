@@ -10,6 +10,7 @@ struct rbiom_args {
 
 const IOM *get_rb_machine();
 void rbiom_update_defaults(struct rbiom_args *rb);
+IO_HANDLE new_rb_machine(uint64_t buffer_size, uint64_t block_size);
 
 // Asynchronous Variable-Block Buffer
 struct avbb_args {

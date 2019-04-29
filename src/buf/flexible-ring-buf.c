@@ -383,3 +383,12 @@ get_rb_machine()
     }
     return (const IOM *)machine;
 }
+
+IO_HANDLE
+new_rb_machine(uint64_t buffer_size, uint64_t block_size)
+{
+    const IOM *rb_machine = get_rb_machine();
+
+    struct rbiom_args rb_args = {buffer_size, block_size};
+    return rb_machine->create(&rb_args);
+}

@@ -9,12 +9,20 @@
 #include "simple-machines.h"
 #include "filter.h"
 
+#define MAX_FILEPATH_LEN 2048
+
 static IOM *file_machine = NULL;
 
 enum file_mode_e {
     F_NOMODE,
     F_READ,
     F_WRITE,
+    F_WRITE_ROTATE,
+};
+
+enum file_rotate_e {
+    F_NOROTATE=0,
+    F_ROTATE,
 };
 
 struct file_desc_t {
@@ -22,6 +30,8 @@ struct file_desc_t {
     char *fname;
     FILE *f;
     enum file_mode_e mode;
+    enum file_rotate_e rotate;
+    uint16_t rotate_index;
     char binary;
     uint64_t rp;
     uint64_t wp;
@@ -42,6 +52,20 @@ open_file(struct file_desc_t *fd)
     }
 
     switch (fd->mode) {
+    case F_WRITE_ROTATE:
+     {
+        // Add the file index as a 5-digit number (index is 2-bytes)
+        char fname[MAX_FILEPATH_LEN];
+        snprintf(fname, MAX_FILEPATH_LEN, "%s.%05d", fd->fname, fd->rotate_index++);
+        fname[MAX_FILEPATH_LEN - 1] = '\0';
+        if (fd->binary) {
+            fd->f = fopen(fname, "wb");
+        } else {
+            fd->f = fopen(fname, "w");
+        }
+        return;
+     }
+
     case F_WRITE:
         if (fd->binary) {
             fd->f = fopen(fd->fname, "wb");
@@ -82,14 +106,31 @@ file_write(IO_FILTER_ARGS)
     pthread_mutex_lock(lock);
     switch (fd->mode) {
     case F_NOMODE:
-        fd->mode = F_WRITE;
+        if (fd->rotate) {
+            fd->mode = F_WRITE_ROTATE;
+        } else {
+            fd->mode = F_WRITE;
+        }
         open_file(fd);
+        break;
+
+    case F_WRITE_ROTATE:
+        fclose(fd->f);
+        fd->f = 0;
+        open_file(fd);
+        break;
+
     case F_WRITE:
         break;
+
     case F_READ:
         fclose(fd->f);
         fd->f = NULL;
-        fd->mode = F_WRITE;
+        if (fd->rotate) {
+            fd->mode = F_WRITE_ROTATE;
+        } else {
+            fd->mode = F_WRITE;
+        }
         open_file(fd);
         break;
     default:
@@ -138,6 +179,7 @@ file_read(IO_FILTER_ARGS)
         open_file(fd);
     case F_READ:
         break;
+    case F_WRITE_ROTATE:
     case F_WRITE:
         fclose(fd->f);
         fd->f = NULL;
@@ -229,6 +271,56 @@ init_filters(struct file_desc_t *f)
     return IO_SUCCESS;
 }
 
+static char *
+build_filepath_str(POOL *p, struct fileiom_args *args) {
+    uint32_t pathlen = 0;
+
+    // Validate directory len
+    if (args->outdir) {
+        pathlen = strlen(args->outdir);
+
+        // Don't forget the path separator
+        if (args->outdir[pathlen] != '/') {
+            pathlen++;
+        }
+    }
+
+    // Rotating files add 6 characters: ".00000"
+    if (F_ROTATE == args->is_rotate) {
+        pathlen += 6;
+    }
+
+    pathlen += strlen(args->fname);
+
+    if (pathlen >= MAX_FILEPATH_LEN) {
+        printf("ERROR: File path too long\n");
+        return NULL;
+    }
+
+    // Using stpcpy instead of strncpy.  Size calculation was completed above.
+    char *fname = (char *)pcalloc(p, MAX_FILEPATH_LEN);
+    char *ptr = fname;
+    if (args->outdir) {
+        ptr = stpcpy(ptr, args->outdir);
+
+        // Don't forget the path separator
+        // stpcpy returns a pointer to the null-terminator.  The -1 index is the
+        // last character of the string.
+        if (ptr[-1] != '/') {
+            ptr = stpcpy(ptr, "/");
+        }
+    }
+
+    // Calcluate how much buffer space is remaining
+    uint32_t remaining = MAX_FILEPATH_LEN - (uint32_t)(ptr - fname);
+    strncpy(ptr, args->fname, remaining);
+
+    // Better safe than sorry
+    fname[MAX_FILEPATH_LEN - 1] = '\0';
+
+    return fname;
+}
+
 static IO_HANDLE
 create_file(void *arg)
 {
@@ -254,11 +346,14 @@ create_file(void *arg)
     d->pool = p;
     d->handle = request_handle(file_machine);
 
-    char *fname = pcalloc(p, 256);
-    strncpy(fname, args->fname, 255);
-    fname[255] = '\0';
-    desc->fname = fname;
+    desc->fname = build_filepath_str(p, args);
+    if (!desc->fname) {
+        pfree(p);
+        return 0;
+    }
+
     desc->binary = args->is_binary;
+    desc->rotate = args->is_rotate;
     desc->rp = 0;
     desc->wp = 0;
 
@@ -302,4 +397,20 @@ get_file_machine()
         file_machine = machine;
     }
     return (const IOM *)machine;
+}
+
+IO_HANDLE
+new_file_machine(char *fname, char *outdir, enum filetype_e type)
+{
+    const IOM *file_machine = get_file_machine();
+    struct fileiom_args args = {fname, outdir, type, F_NOROTATE};
+    return file_machine->create(&args);
+}
+
+IO_HANDLE
+new_rotating_file_machine(char *fname, char *outdir, enum filetype_e type)
+{
+    const IOM *file_machine = get_file_machine();
+    struct fileiom_args args = {fname, outdir, type, F_ROTATE};
+    return file_machine->create(&args);
 }

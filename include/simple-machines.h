@@ -47,9 +47,14 @@ enum filetype_e
 // ARG STRUCTS
 struct fileiom_args {
     char *fname;
+    char *outdir;
     char is_binary;
+    char is_rotate;
 };
 
 const IOM *get_file_machine();
+
+IO_HANDLE new_file_machine(char *fname, char *outdir, enum filetype_e type);
+IO_HANDLE new_rotating_file_machine(char *fname, char *outdir, enum filetype_e type);
 
 #endif
