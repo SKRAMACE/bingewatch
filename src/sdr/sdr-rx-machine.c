@@ -15,6 +15,24 @@ static pthread_mutex_t sdr_list_lock = PTHREAD_MUTEX_INITIALIZER;
 static struct sdr_channel_t *channels = NULL;
 static struct sdr_device_t *devices = NULL;
 
+/* Device Access */
+static struct sdr_device_t *
+get_device(IO_HANDLE h)
+{
+    struct sdr_device_t *d = devices;
+    while (d) {
+        struct sdr_channel_t *c = d->channels;
+        while (c) {
+            if (c->handle == h) {
+                return d;
+            }
+            c = c->next;
+        }
+        d = d->next;
+    }
+    return NULL;
+}
+
 /* Channel Access */
 static void
 acquire_channel(struct sdr_channel_t *c)
@@ -32,14 +50,13 @@ release_channel(struct sdr_channel_t *c)
     pthread_mutex_unlock(&c->lock);
 }
 
-// Add a new channel descriptor
-void
-add_channel(struct sdr_channel_t *chan)
+static void
+add_channel(struct sdr_device_t *dev, struct sdr_channel_t *chan)
 {
     pthread_mutex_lock(&sdr_list_lock);
-    struct sdr_channel_t *c = channels;
+    struct sdr_channel_t *c = dev->channels;
     if (!c) {
-        channels = chan;
+        dev->channels = chan;
     } else {
         while (c->next) {
             c = c->next;
@@ -50,19 +67,20 @@ add_channel(struct sdr_channel_t *chan)
 }
 
 // Get a pointer to a channel with the specified handle
-struct sdr_channel_t *
+static struct sdr_channel_t *
 get_channel(IO_HANDLE h)
 {
     pthread_mutex_lock(&sdr_list_lock);
-    struct sdr_channel_t *c = channels;
+    struct sdr_device_t *d = get_device(h);
+    if (!d) {
+        return NULL;
+    }
 
+    struct sdr_channel_t *c = d->channels;
     while (c) {
-        IO_HANDLE ch = c->handle;
-
-        if (ch == h) {
+        if (c->handle == h) {
             break;
         }
-
         c = c->next;
     }
     pthread_mutex_unlock(&sdr_list_lock);
@@ -70,12 +88,16 @@ get_channel(IO_HANDLE h)
     return c;
 }
 
-struct sdr_channel_t *
+static struct sdr_channel_t *
 pop_channel(IO_HANDLE h)
 {
     pthread_mutex_lock(&sdr_list_lock);
-    struct sdr_channel_t *c = channels;
+    struct sdr_device_t *d = get_device(h);
+    if (!d) {
+        return NULL;
+    }
 
+    struct sdr_channel_t *c = d->channels;
     struct sdr_channel_t *cp = NULL;
     while (c) {
         if (c->handle == h) {
@@ -105,8 +127,8 @@ pop_channel(IO_HANDLE h)
     return c;
 }
 
-void
-sdr_channel_lock(IO_HANDLE h)
+static void
+sdr_lock(IO_HANDLE h)
 {
     struct sdr_channel_t *c = get_channel(h);
     if (!c) {
@@ -116,8 +138,8 @@ sdr_channel_lock(IO_HANDLE h)
     pthread_mutex_lock(&c->lock);
 }
 
-void
-sdr_channel_unlock(IO_HANDLE h)
+static void
+sdr_unlock(IO_HANDLE h)
 {
     struct sdr_channel_t *c = get_channel(h);
     if (!c) {
@@ -128,74 +150,6 @@ sdr_channel_unlock(IO_HANDLE h)
 }
 
 static void
-destroy_channel(IO_HANDLE h)
-{
-    // Remove the channel from operation
-    struct sdr_channel_t *c = pop_channel(h);
-    if (!c) {
-        return;
-    }
-
-    // Wait, if the channel is in use
-    while (c->in_use) {
-        continue;
-    }
-
-    // Call the implementation-specific destroy function
-    if (c->destroy_channel_impl) {
-        pthread_mutex_lock(&c->lock);
-        c->destroy_channel_impl(c);
-        pthread_mutex_unlock(&c->lock);
-    }
-
-    // Access the HW struct
-    struct sdr_device_t *d = c->device;
-
-    // Reset IO Handle in the device struct
-    pthread_mutex_lock(&c->lock);
-    d->io_handles[c->num] = 0;
-    pthread_mutex_unlock(&c->lock);
-
-    pthread_mutex_destroy(&c->lock);
-    pfree(c->pool);
-
-    pthread_mutex_lock(&sdr_list_lock);
-    cleanup_device(d);
-    pthread_mutex_unlock(&sdr_list_lock);
-}
-
-/* Device Access */
-// Add a new device descriptor
-void
-add_device(struct sdr_device_t *dev)
-{
-    pthread_mutex_lock(&sdr_list_lock);
-    struct sdr_device_t *d = devices;
-    if (!d) {
-        devices = dev;
-    } else {
-        while (d->next) {
-            d = d->next;
-        }
-        d->next = dev;
-    }
-    pthread_mutex_unlock(&sdr_list_lock);
-}
-
-struct sdr_device_t *
-get_device(char id)
-{
-    struct sdr_device_t *d = devices;
-    while (d) {
-        if (d->id == id) {
-            return d;
-        }
-        d = d->next;
-    }
-    return NULL;
-}
-
-void
 cleanup_device(struct sdr_device_t *device)
 {
     struct sdr_device_t *d = devices; 
@@ -213,16 +167,16 @@ cleanup_device(struct sdr_device_t *device)
         return;
     }
 
-    // Preserve the device until all io handles are destroyed
+    // Preserve the device until all io channels are destroyed
     char i;
-    for (i = 0; i < d->io_handle_count; i++) {
-        if (d->io_handles[i]) {
-            return;
-        }
+    if (d->channels) {
+        return;
     }
 
-    printf("All io handles have been destroyed.  Destroying device %d.\n", d->id);
+    printf("All channels have been destroyed.  Destroying device %d.\n", d->id);
 
+    d->destroy_device_impl(d);
+    
     // Device in first slot
     if (!dp) {
         devices = d->next;
@@ -234,30 +188,93 @@ cleanup_device(struct sdr_device_t *device)
     pfree(d->pool);
 }
 
-struct io_desc *
-sdr_get_rx_desc(IO_HANDLE h)
+static void
+sdr_destroy(IO_HANDLE h)
+{
+    // Access the device, for reference
+    struct sdr_device_t *d = get_device(h);
+
+    // Remove the channel from operation
+    struct sdr_channel_t *c = pop_channel(h);
+    if (!c) {
+        return;
+    }
+
+    // Wait until channel is not being used
+    while (c->in_use) {
+        continue;
+    }
+
+    // Call the implementation-specific destroy function
+    if (c->destroy_channel_impl) {
+        pthread_mutex_lock(&c->lock);
+        c->destroy_channel_impl(c);
+        pthread_mutex_unlock(&c->lock);
+    }
+
+    // Reset IO Handle in the device struct
+    pthread_mutex_lock(&c->lock);
+    c->io = 0;
+    pthread_mutex_unlock(&c->lock);
+
+    pthread_mutex_destroy(&c->lock);
+    pfree(c->pool);
+
+    pthread_mutex_lock(&sdr_list_lock);
+    cleanup_device(d);
+    pthread_mutex_unlock(&sdr_list_lock);
+}
+
+/* Device Access */
+// Add a new device descriptor
+static void
+add_device(struct sdr_device_t *dev)
+{
+    pthread_mutex_lock(&sdr_list_lock);
+    struct sdr_device_t *d = devices;
+    if (!d) {
+        devices = dev;
+    } else {
+        while (d->next) {
+            d = d->next;
+        }
+        d->next = dev;
+    }
+    pthread_mutex_unlock(&sdr_list_lock);
+}
+
+static struct io_desc *
+sdr_rx_get_read_desc(IO_HANDLE h)
 {
     struct sdr_channel_t *c = get_channel(h);
     if (!c) {
         return NULL;
     }
 
-    return c->io_rx;
+    if (c->dir == SDR_CHAN_RX) {
+        return c->io;
+    }
+
+    return NULL;
 }
 
-struct io_desc *
-sdr_get_tx_desc(IO_HANDLE h)
+static struct io_desc *
+sdr_rx_get_write_desc(IO_HANDLE h)
 {
     struct sdr_channel_t *c = get_channel(h);
     if (!c) {
         return NULL;
     }
 
-    return c->io_tx;
+    if (c->dir == SDR_CHAN_TX) {
+        return c->io;
+    }
+
+    return NULL;
 }
 
-int
-sdr_read(IO_HANDLE h, void *buf, uint64_t *len)
+static int
+sdr_rx_read(IO_HANDLE h, void *buf, uint64_t *len)
 {
     struct sdr_channel_t *c = get_channel(h);
     if (!c) {
@@ -266,32 +283,22 @@ sdr_read(IO_HANDLE h, void *buf, uint64_t *len)
     }
 
     acquire_channel(c);
-    struct io_filter_t *f = (struct io_filter_t *)c->io_rx->obj;
+    struct io_filter_t *f = (struct io_filter_t *)c->io->obj;
     int status = f->call(f, buf, len, IO_NO_BLOCK, IO_DEFAULT_ALIGN);
     release_channel(c);
 
     return status;
 }
 
-int
-sdr_write(IO_HANDLE h, void *buf, uint64_t *len)
+static int
+sdr_rx_write(IO_HANDLE h, void *buf, uint64_t *len)
 {
-    struct sdr_channel_t *c = get_channel(h);
-    if (!c) {
-        *len = 0;
-        return IO_ERROR;
-    }
-
-    acquire_channel(c);
-    struct io_filter_t *f = (struct io_filter_t *)c->io_tx->obj;
-    int status = f->call(f, buf, len, IO_NO_BLOCK, IO_DEFAULT_ALIGN);
-    release_channel(c);
-
-    return status;
+    printf("ERROR: sdr_rx_machine has no write function\n");
+    return IO_ERROR;
 }
 
-enum io_status
-init_rx_filter(struct sdr_channel_t *chan, sdr_init rx)
+static enum io_status
+init_rx_filter(struct sdr_channel_t *chan, struct sdr_device_t *dev, sdr_filter_init rx)
 {
     if (!rx) {
         printf("Failed to initialize rx filter: Null sdr_init function\n");
@@ -299,77 +306,40 @@ init_rx_filter(struct sdr_channel_t *chan, sdr_init rx)
     }
 
     // Create io descriptors
-    chan->io_rx = (struct io_desc *)pcalloc(chan->pool, sizeof(struct io_desc));
-    if (!chan->io_rx) {
+    chan->io = (struct io_desc *)pcalloc(chan->pool, sizeof(struct io_desc));
+    if (!chan->io) {
         printf("Failed to initialize read descriptor\n");
         return IO_ERROR;
     }
-    chan->io_rx->alloc = chan->pool;
+    chan->io->alloc = chan->pool;
 
-    struct io_filter_t *f = rx(chan->pool, chan);
+    struct io_filter_t *f = rx(chan->pool, chan, dev);
     if (!f) {
         return IO_ERROR;
     }
-    chan->io_rx->obj = f;
-
-    return IO_SUCCESS;
-}
-
-enum io_status
-init_tx_filter(struct sdr_channel_t *chan, sdr_init tx)
-{
-    if (!tx) {
-        printf("Failed to initialize tx filter: Null sdr_init function\n");
-        return IO_ERROR;
-    }
-
-    chan->io_tx = (struct io_desc *)pcalloc(chan->pool, sizeof(struct io_desc));
-    if (!chan->io_tx) {
-        printf("Failed to initialize read descriptor\n");
-        return IO_ERROR;
-    }
-    chan->io_tx->alloc = chan->pool;
-
-    struct io_filter_t *f = tx(chan->pool, chan);
-    if (!f) {
-        return IO_ERROR;
-    }
-    chan->io_tx->obj = f;
-
-    return IO_SUCCESS;
-}
-
-/*
- * Create new filters to interface directly with the hardware 
- */
-enum io_status
-init_filters(struct sdr_channel_t *chan, sdr_init rx, sdr_init tx)
-{
-    if (rx) {
-        if (init_rx_filter(chan, rx) != IO_SUCCESS) {
-            return IO_ERROR;
-        }
-    }
-
-    if (tx) {
-        if (init_tx_filter(chan, tx) != IO_SUCCESS) {
-            return IO_ERROR;
-        }
-    }
+    chan->io->obj = f;
 
     return IO_SUCCESS;
 }
 
 IO_HANDLE
-create_sdr(IOM *machine, void *arg)
+sdr_create(const IOM *machine, void *arg)
 {
-    // Get sdr functions from IOM object
-    SDR *sdr = (SDR *)machine->obj;
-    if (!sdr) {
+    // Get sdr api
+    SDR_API *api = (SDR_API *)machine->obj;
+    if (!api) {
         return 0;
     }
 
-    sdr->set_vars(arg);
+    POOL *var_pool = create_subpool(machine->alloc);
+    if (!var_pool) {
+        printf("ERROR: Failed to create memory pool(s)\n");
+        return 0;
+    }
+
+    if (api->set_vars) {
+        api->set_vars(var_pool, arg);
+    }
 
     // Device Init
     POOL *device_pool = create_subpool(machine->alloc);
@@ -378,12 +348,13 @@ create_sdr(IOM *machine, void *arg)
         return 0;
     }
 
-    struct sdr_device_t *device = sdr->device(device_pool, arg);
+    struct sdr_device_t *device = api->device(device_pool, arg);
     if (!device) {
         printf("ERROR: Failed to create device descriptor\n");
         pfree(device_pool);
         return 0;
     }
+    pthread_mutex_init(&device->lock, NULL);
     device->pool = device_pool;
 
     // Channel Init
@@ -394,44 +365,91 @@ create_sdr(IOM *machine, void *arg)
         return 0;
     }
 
-    struct sdr_channel_t *chan = sdr->channel(channel_pool, arg);
+    struct sdr_channel_t *chan = api->channel(channel_pool, device, arg);
     if (!chan) {
         printf("ERROR: Failed to create a new channel\n");
         pfree(device_pool);
         pfree(channel_pool);
         return 0;
     }
-
     pthread_mutex_init(&chan->lock, NULL);
     chan->pool = channel_pool;
-    chan->direction = SDR_CHAN_NOINIT;
+    chan->dir = SDR_CHAN_RX;
 
-    chan->device = device;
-
-    if (init_filters(chan, sdr->rx_filter, sdr->tx_filter) != IO_SUCCESS) {
-        printf("ERROR: Failed to initialize filters\n");
+    if (init_rx_filter(chan, device, api->rx_filter) != IO_SUCCESS) {
+        printf("ERROR: Failed to initialize filter\n");
         pfree(device_pool);
         pfree(channel_pool);
         return 0;
     }
 
     add_device(device);
-    add_channel(chan);
+    add_channel(device, chan);
 
-    chan->handle = request_handle(machine);
+    chan->handle = request_handle((IOM *)machine);
     printf("Handle for %s = %d\n", machine->name, chan->handle);
+
     return chan->handle;
 }
 
-void
-sdr_machine_register(IOM *machine)
+static void
+set_freq(IO_HANDLE h, void *freq)
 {
-    machine->lock = sdr_channel_lock;
+    struct sdr_channel_t *chan = get_channel(h);
+    chan->freq = *(float *)freq;
+}
+
+static void
+set_rate(IO_HANDLE h, void *rate)
+{
+    struct sdr_channel_t *chan = get_channel(h);
+    chan->rate = *(float *)rate;
+}
+
+static void
+set_gain(IO_HANDLE h, void *gain)
+{
+    struct sdr_channel_t *chan = get_channel(h);
+    chan->gain = *(float *)gain;
+}
+
+void
+sdr_init_api_functions(IOM *machine, SDR_API *api)
+{
+    api->set_freq = set_freq;
+    api->set_rate = set_rate;
+    api->set_gain = set_gain;
+}
+
+void
+sdr_init_machine_functions(IOM *machine)
+{
+    machine->lock = sdr_lock;
+    machine->unlock = sdr_unlock;
+    machine->get_read_desc = sdr_rx_get_read_desc;
+    machine->get_write_desc = sdr_rx_get_write_desc;
     machine->stop = machine_disable_read;
-    machine->destroy = destroy_channel;
-    machine->unlock = sdr_channel_unlock;
-    machine->get_read_desc = sdr_get_rx_desc;
-    machine->get_write_desc = sdr_get_tx_desc;
-    machine->read = sdr_read;
-    machine->write = sdr_write;
+    machine->destroy = sdr_destroy;
+    machine->read = sdr_rx_read;
+    machine->write = sdr_rx_write;
+}
+
+const struct sdr_device_t *
+sdr_get_device(IO_HANDLE h)
+{
+    return (const struct sdr_device_t *)get_device(h);
+}
+
+struct sdr_channel_t *
+sdr_get_channel(IO_HANDLE h, const struct sdr_device_t *dev)
+{
+    struct sdr_channel_t *chan = dev->channels;
+    while (chan) {
+        if (chan->handle == h) {
+            return chan;
+        }
+        chan = chan->next;
+    }
+
+    return NULL;
 }

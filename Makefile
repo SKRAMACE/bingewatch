@@ -37,13 +37,18 @@ endif
 .PHONY: install clean uninstall
 
 BUF = \
-
-MACHINES = \
 	block-list-buf.c \
 	flexible-ring-buf.c \
+
+SDR = \
+    sdr-rx-machine.c \
+    soapy-machine.c \
+
+MACHINES = \
 	socket-machine.c \
-	sdr-machine.c \
 	file-machine.c \
+    $(BUF) \
+	$(SDR) \
 
 FILTERS = \
 	filters.c \
