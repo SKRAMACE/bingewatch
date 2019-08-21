@@ -46,6 +46,7 @@ void blb_lock(IO_HANDLE h);
 void blb_unlock(IO_HANDLE h);
 void blb_destroy(IO_HANDLE h);
 void forge_ring(void *blocklist);
+int blb_init_struct(POOL *p, struct __buffer_t *b);
 
 // Buffer Access
 struct io_desc *blb_get_read_desc(IO_HANDLE h);

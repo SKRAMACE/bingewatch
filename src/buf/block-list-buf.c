@@ -321,6 +321,29 @@ blb_write(IO_HANDLE h, void *buf, uint64_t *len)
     return status;
 }
 
+int
+blb_init_struct(POOL *p, struct __buffer_t *b)
+{
+    pthread_mutex_init(&b->lock, NULL);
+    b->pool = p;
+
+    b->io_read = (struct io_desc *)pcalloc(p, sizeof(struct io_desc));
+    if (!b->io_read) {
+        printf("Failed to initialize read descriptor\n");
+        return IO_ERROR;
+    }
+    b->io_read->alloc = p;
+
+    b->io_write = (struct io_desc *)pcalloc(p, sizeof(struct io_desc));
+    if (!b->io_write) {
+        printf("Failed to initialize write descriptor\n");
+        return IO_ERROR;
+    }
+    b->io_write->alloc = p;
+
+    return IO_SUCCESS;
+}
+
 void
 blb_init_machine_functions(IOM *machine)
 {

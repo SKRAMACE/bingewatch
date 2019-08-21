@@ -187,27 +187,17 @@ static enum io_status
 init_filters(struct ring_t *ring)
 {
     struct __buffer_t *b = (struct __buffer_t *)ring;
-
-    b->io_read = (struct io_desc *)pcalloc(b->pool, sizeof(struct io_desc));
-    if (!b->io_read) {
-        printf("Failed to initialize read descriptor\n");
-        return IO_ERROR;
+    if (b->handle == 0) {
+        b->handle = request_handle(ring_buffer_machine);
     }
-    b->io_read->alloc = b->pool;
 
-    b->io_write = (struct io_desc *)pcalloc(b->pool, sizeof(struct io_desc));
-    if (!b->io_write) {
-        printf("Failed to initialize read descriptor\n");
-        return IO_ERROR;
-    }
-    b->io_write->alloc = b->pool;
-    
     struct io_filter_t *filter;
     filter = create_filter(b->pool, "_buf", buf_read);
     if (!filter) {
         printf("Failed to initialize read filter\n");
         return IO_ERROR;
     }
+
     IO_HANDLE *handle = palloc(filter->alloc, sizeof(IO_HANDLE));
     *handle = b->handle;
     filter->obj = handle;
@@ -302,8 +292,10 @@ create_buffer(void *arg)
 
     // Initialize generic buffer
     struct __buffer_t *b = (struct __buffer_t *)ring;
-    pthread_mutex_init(&b->lock, NULL);
-    b->pool = p;
+    if (blb_init_struct(p, b) != IO_SUCCESS) {
+        pfree(p);
+        return 0;
+    }
 
     // Block arithmetic
     struct rbiom_args *args = (struct rbiom_args *)arg;
@@ -338,6 +330,7 @@ create_buffer(void *arg)
     ring->rp = blocks;
     pthread_mutex_init(&ring->wlock, NULL);
     pthread_mutex_init(&ring->rlock, NULL);
+
     b->handle = request_handle(ring_buffer_machine);
 
     int status = init_filters(ring);
@@ -391,4 +384,24 @@ new_rb_machine(uint64_t buffer_size, uint64_t block_size)
 
     struct rbiom_args rb_args = {buffer_size, block_size};
     return rb_machine->create(&rb_args);
+}
+
+uint64_t
+rb_get_size(IO_HANDLE h)
+{
+    struct ring_t *ring = (struct ring_t *)blb_get_buffer(h);
+    if (!ring) {
+        return 0;
+    }
+    return ring->size;
+}
+
+uint64_t
+rb_get_bytes(IO_HANDLE h)
+{
+    struct ring_t *ring = (struct ring_t *)blb_get_buffer(h);
+    if (!ring) {
+        return 0;
+    }
+    return ring->bytes;
 }

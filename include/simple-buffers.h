@@ -9,8 +9,18 @@ struct rbiom_args {
 };
 
 const IOM *get_rb_machine();
+uint64_t rb_get_size(IO_HANDLE h);
+uint64_t rb_get_bytes(IO_HANDLE h);
 void rbiom_update_defaults(struct rbiom_args *rb);
 IO_HANDLE new_rb_machine(uint64_t buffer_size, uint64_t block_size);
+
+// Sync Buffer
+// Continuous Variable-Size Buffer
+struct sync_iom_args {
+    uint64_t buf_bytes;
+    uint64_t block_bytes;
+    uint16_t align;
+};
 
 // Asynchronous Variable-Block Buffer
 struct avbb_args {
