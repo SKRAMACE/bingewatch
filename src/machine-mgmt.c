@@ -109,7 +109,7 @@ machine_register(const char *name)
     machine->get_read_desc  = get_read_desc;
     machine->get_write_desc = get_write_desc;
 
-    machine->buf_size_rec = 1*MB;
+    machine->buf_size_rec = 0;
 
     // Track new machine 
     machine_count++;
