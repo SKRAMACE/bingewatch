@@ -8,19 +8,19 @@
 
 #define DECLARE_CREATE_NOIMPL \
 static IO_HANDLE create_noimpl(void *arg) { \
-    fprintf(stderr, "ERROR: Machine function \"create\" was not implemented"); \
+    fprintf(stderr, "ERROR: Machine function \"create\" was not implemented\n"); \
 }
 #define CREATE_NOIMPL create_noimpl
 
 #define DECLARE_NOIMPL(name) \
 static void name##_noimpl(IO_HANDLE h) { \
-    fprintf(stderr, "ERROR: Machine function \"" #name "\" was not implemented"); \
+    fprintf(stderr, "ERROR: Machine function \"" #name "\" was not implemente\nd"); \
 }
 #define NOIMPL(name) name##_noimpl
 
 #define DECLARE_IO_NOIMPL(name) \
 static int name##_noimpl(IO_HANDLE h, void *buf, uint64_t *len) { \
-    fprintf(stderr, "ERROR: Machine function \"" #name "\" was not implemented"); \
+    fprintf(stderr, "ERROR: Machine function \"" #name "\" was not implemente\nd"); \
 }
 #define IO_NOIMPL(name) name##_noimpl
 
