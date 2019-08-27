@@ -12,7 +12,7 @@ const IOM *get_rb_machine();
 uint64_t rb_get_size(IO_HANDLE h);
 uint64_t rb_get_bytes(IO_HANDLE h);
 void rbiom_update_defaults(struct rbiom_args *rb);
-IO_HANDLE new_rb_machine(uint64_t buffer_size, uint64_t block_size);
+const IOM *new_rb_machine(IO_HANDLE *h, uint64_t buffer_size, uint64_t block_size);
 
 // Sync Buffer
 // Continuous Variable-Size Buffer

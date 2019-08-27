@@ -14,13 +14,13 @@ static IO_HANDLE create_noimpl(void *arg) { \
 
 #define DECLARE_NOIMPL(name) \
 static void name##_noimpl(IO_HANDLE h) { \
-    fprintf(stderr, "ERROR: Machine function \"" #name "\" was not implemente\nd"); \
+    fprintf(stderr, "ERROR: Machine function \"" #name "\" was not implemented\n"); \
 }
 #define NOIMPL(name) name##_noimpl
 
 #define DECLARE_IO_NOIMPL(name) \
 static int name##_noimpl(IO_HANDLE h, void *buf, uint64_t *len) { \
-    fprintf(stderr, "ERROR: Machine function \"" #name "\" was not implemente\nd"); \
+    fprintf(stderr, "ERROR: Machine function \"" #name "\" was not implemented\n"); \
 }
 #define IO_NOIMPL(name) name##_noimpl
 
@@ -99,15 +99,15 @@ machine_register(const char *name)
     
     // Set generic functions
     machine->create  = CREATE_NOIMPL;
-    machine->read    = IO_NOIMPL(read);
-    machine->write   = IO_NOIMPL(write);
+    machine->read    = machine_desc_read;
+    machine->write   = machine_desc_write;
     machine->stop    = NOIMPL(stop);
-    machine->lock    = NOIMPL(lock);
-    machine->unlock  = NOIMPL(unlock);
     machine->destroy = NOIMPL(destroy);
 
-    machine->get_read_desc  = get_read_desc;
-    machine->get_write_desc = get_write_desc;
+    machine->lock    = machine_lock;
+    machine->unlock  = machine_unlock;
+    machine->get_read_desc  = machine_get_read_desc;
+    machine->get_write_desc = machine_get_write_desc;
 
     machine->buf_size_rec = 0;
 

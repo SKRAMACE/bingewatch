@@ -129,7 +129,6 @@ start_segments(struct io_stream_t *stream)
         *seg_state = &stream->state;
         s->lock = &stream->lock;
         pthread_create(&s->thread, NULL, s->fn, (void *)s);
-        printf("pthread %d started\n", (int)s->thread);
         s = s->next;
     }
 }

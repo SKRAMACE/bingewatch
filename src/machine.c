@@ -1,6 +1,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <unistd.h>
 #include <radpool.h>
 
 #include "machine.h"
@@ -9,42 +10,46 @@
 struct machine_desc_t *machine_descriptors = NULL;
 static pthread_mutex_t machine_desc_list_lock = PTHREAD_MUTEX_INITIALIZER;
 
-static inline void
-acquire_machine_desc(struct machine_desc_t *d)
-{
-    pthread_mutex_lock(&d->lock);
-    d->in_use++;
-    pthread_mutex_unlock(&d->lock);
-}
-
-static inline void
-release_machine_desc(struct machine_desc_t *d)
-{
-    pthread_mutex_lock(&d->lock);
-    d->in_use--;
-    pthread_mutex_unlock(&d->lock);
-}
-
 // Add a new descriptor
 void
-add_machine_desc(struct machine_desc_t *desc)
+machine_register_desc(struct machine_desc_t *addme, IO_HANDLE *handle)
 {
+    // Get a handle, and set in descriptor, and filter objects
+    IO_HANDLE h = request_handle(addme->machine);
+    if (h == 0) {
+        *handle = 0;
+        return;
+    }
+    addme->handle = h;
+
+    if (addme->io_read) {
+        struct io_filter_t *f = (struct io_filter_t *)addme->io_read->obj;
+        f->obj = &addme->handle;
+    }
+
+    if (addme->io_write) {
+        struct io_filter_t *f = (struct io_filter_t *)addme->io_write->obj;
+        f->obj = &addme->handle;
+    }
+
+    *handle = h;
+
     pthread_mutex_lock(&machine_desc_list_lock);
     struct machine_desc_t *d = machine_descriptors;
     if (!d) {
-        machine_descriptors = desc;
+        machine_descriptors = addme;
     } else {
         while (d->next) {
             d = d->next;
         }
-        d->next = desc;
+        d->next = addme;
     }
     pthread_mutex_unlock(&machine_desc_list_lock);
 }
 
 // Get a pointer to a descriptor with the specified handle
 struct machine_desc_t *
-get_machine_desc(IO_HANDLE h)
+machine_get_desc(IO_HANDLE h)
 {
     pthread_mutex_lock(&machine_desc_list_lock);
     struct machine_desc_t *d = machine_descriptors;
@@ -75,12 +80,12 @@ free_machine_desc(struct machine_desc_t *desc) {
 
 // Free the descriptor 
 void
-destroy_machine_desc(IO_HANDLE h)
+machine_destroy_desc(IO_HANDLE h)
 {
-    pthread_mutex_lock(&machine_desc_list_lock);
     struct machine_desc_t *d = machine_descriptors;
-
     struct machine_desc_t *dp = NULL;
+
+    pthread_mutex_lock(&machine_desc_list_lock);
     while (d) {
         if (d->handle == h) {
             break;
@@ -92,6 +97,7 @@ destroy_machine_desc(IO_HANDLE h)
 
     // handle not found
     if (!d) {
+        pthread_mutex_unlock(&machine_desc_list_lock);
         return;
 
     // handle in first slot
@@ -104,6 +110,7 @@ destroy_machine_desc(IO_HANDLE h)
     pthread_mutex_unlock(&machine_desc_list_lock);
 
     while (d->in_use) {
+        usleep(500000);
         continue;
     }
 
@@ -113,38 +120,72 @@ destroy_machine_desc(IO_HANDLE h)
 }
 
 void
-machine_desc_lock(IO_HANDLE h)
+machine_desc_acquire(struct machine_desc_t *d)
 {
-    struct machine_desc_t *d = get_machine_desc(h);
+    pthread_mutex_lock(&d->lock);
+    d->in_use++;
+    pthread_mutex_unlock(&d->lock);
+}
+
+void
+machine_desc_release(struct machine_desc_t *d)
+{
+    pthread_mutex_lock(&d->lock);
+    d->in_use--;
+    pthread_mutex_unlock(&d->lock);
+}
+
+void
+machine_lock(IO_HANDLE h)
+{
+    struct machine_desc_t *d = machine_get_desc(h);
+    if (!d) {
+        return;
+    }
     pthread_mutex_lock(&d->lock);
 }
 
 void
-machine_desc_unlock(IO_HANDLE h)
+machine_unlock(IO_HANDLE h)
 {
-    struct machine_desc_t *d = get_machine_desc(h);
+    struct machine_desc_t *d = machine_get_desc(h);
+    if (!d) {
+        return;
+    }
     pthread_mutex_unlock(&d->lock);
 }
 
+/*
+ * Return a pointer to the first read descriptor
+ */
 struct io_desc *
-get_read_desc(IO_HANDLE h)
+machine_get_read_desc(IO_HANDLE h)
 {
-    struct machine_desc_t *d = get_machine_desc(h);
+    struct machine_desc_t *d = machine_get_desc(h);
+    if (!d) {
+        return NULL;
+    }
     return d->io_read;
 }
 
+/*
+ * Return a pointer to the first write descriptor
+ */
 struct io_desc *
-get_write_desc(IO_HANDLE h)
+machine_get_write_desc(IO_HANDLE h)
 {
-    struct machine_desc_t *d = get_machine_desc(h);
+    struct machine_desc_t *d = machine_get_desc(h);
+    if (!d) {
+        return NULL;
+    }
     return d->io_write;
 }
 
 int
 machine_desc_read(IO_HANDLE h, void *buf, uint64_t *len)
 {
-    struct machine_desc_t *d = get_machine_desc(h);
-    if (!d) {
+    struct machine_desc_t *d = machine_get_desc(h);
+    if (!d || !d->io_read || !d->io_read->obj) {
         *len = 0;
         return IO_ERROR;
     }
@@ -154,10 +195,10 @@ machine_desc_read(IO_HANDLE h, void *buf, uint64_t *len)
         return IO_COMPLETE;
     }
 
-    acquire_machine_desc(d);
+    machine_desc_acquire(d);
     struct io_filter_t *f = (struct io_filter_t *)d->io_read->obj;
     int status = f->call(f, buf, len, IO_NO_BLOCK, IO_DEFAULT_ALIGN);
-    release_machine_desc(d);
+    machine_desc_release(d);
 
     return status;
 }
@@ -165,8 +206,8 @@ machine_desc_read(IO_HANDLE h, void *buf, uint64_t *len)
 int
 machine_desc_write(IO_HANDLE h, void *buf, uint64_t *len)
 {
-    struct machine_desc_t *d = get_machine_desc(h);
-    if (!d) {
+    struct machine_desc_t *d = machine_get_desc(h);
+    if (!d || !d->io_write || !d->io_write->obj) {
         *len = 0;
         return IO_ERROR;
     }
@@ -176,10 +217,10 @@ machine_desc_write(IO_HANDLE h, void *buf, uint64_t *len)
         return IO_COMPLETE;
     }
 
-    acquire_machine_desc(d);
+    machine_desc_acquire(d);
     struct io_filter_t *f = (struct io_filter_t *)d->io_write->obj;
     int status = f->call(f, buf, len, IO_NO_BLOCK, IO_DEFAULT_ALIGN);
-    release_machine_desc(d);
+    machine_desc_release(d);
 
     return status;
 }
@@ -187,7 +228,7 @@ machine_desc_write(IO_HANDLE h, void *buf, uint64_t *len)
 void
 machine_disable_read(IO_HANDLE h)
 {
-    struct machine_desc_t *d = get_machine_desc(h);
+    struct machine_desc_t *d = machine_get_desc(h);
     if (d) {
         d->io_read->disabled = 1;
     }
@@ -197,10 +238,38 @@ machine_disable_read(IO_HANDLE h)
 void
 machine_disable_write(IO_HANDLE h)
 {
-    struct machine_desc_t *d = get_machine_desc(h);
+    struct machine_desc_t *d = machine_get_desc(h);
     if (d) {
         d->io_write->disabled = 1;
     }
     
 }
+
+IO_HANDLE
+machine_desc_init(POOL *p, IOM *machine, IO_DESC *d)
+{
+    pthread_mutex_init(&d->lock, NULL);
+    d->pool = p;
+
+    d->io_read = (struct io_desc *)pcalloc(p, sizeof(struct io_desc));
+    if (!d->io_read) {
+        printf("Failed to initialize read descriptor\n");
+        return IO_ERROR;
+    }
+    d->io_read->alloc = p;
+
+    d->io_write = (struct io_desc *)pcalloc(p, sizeof(struct io_desc));
+    if (!d->io_write) {
+        printf("Failed to initialize write descriptor\n");
+        return IO_ERROR;
+    }
+    d->io_write->alloc = p;
+
+    // Initialize handle to 0 (it's set by machine_register_desc()
+    d->handle = 0;
+    d->machine = machine;
+
+    return IO_SUCCESS;
+}
+
 

@@ -494,11 +494,7 @@ get_sock_machine()
 
         machine->create = create_sock;
         machine->destroy = destroy_sock;
-        machine->lock = machine_desc_lock;
         machine->stop = machine_disable_read;
-        machine->unlock = machine_desc_unlock;
-        machine->get_read_desc = get_read_desc;
-        machine->get_write_desc = get_write_desc;
         machine->read = sock_read;
         machine->write = sock_write;
         machine->obj = NULL;

@@ -185,3 +185,39 @@ add_write_filter(IO_HANDLE h, struct io_filter_t *addme)
     io->obj = addme;
     machine->unlock(h);
 }
+
+struct io_filter_t *
+filter_read_init(POOL *p, const char *name, io_filter_fn fn, IO_DESC *d)
+{
+    if (!d->io_read) {
+        printf("Failed to initialize read filter\n");
+        return NULL;
+    }
+
+    struct io_filter_t *filter;
+    filter = create_filter(p, name, fn);
+    if (!filter) {
+        printf("Failed to initialize read filter\n");
+        return NULL;
+    }
+    d->io_read->obj = filter;
+    return filter;
+}
+
+struct io_filter_t *
+filter_write_init(POOL *p, const char *name, io_filter_fn fn, IO_DESC *d)
+{
+    if (!d->io_write) {
+        printf("Failed to initialize write filter\n");
+        return NULL;
+    }
+
+    struct io_filter_t *filter;
+    filter = create_filter(p, name, fn);
+    if (!filter) {
+        printf("Failed to initialize write filter\n");
+        return NULL;
+    }
+    d->io_write->obj = filter;
+    return filter;
+}

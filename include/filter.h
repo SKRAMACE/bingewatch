@@ -1,6 +1,8 @@
 #ifndef __IO_FILTER_H__
 #define __IO_FILTER_H__
 
+#include "machine.h"
+
 #define IO_MAX_NAME_LEN 64
 
 #define ERROR_DIRECTION() (printf("ERROR: Filter \"%s\" must be configures with a directon.\n", __FUNCTION__))
@@ -72,5 +74,7 @@ void register_write_filter(int h, io_filter_fn fn, const char *name);
 void register_read_filter(int h, io_filter_fn fn, const char *name);
 void add_write_filter(int h, struct io_filter_t *addme);
 void add_read_filter(int h, struct io_filter_t *addme);
+struct io_filter_t *filter_read_init(POOL *p, const char *name, io_filter_fn fn, IO_DESC *d);
+struct io_filter_t *filter_write_init(POOL *p, const char *name, io_filter_fn fn, IO_DESC *d);
 
 #endif

@@ -95,7 +95,7 @@ file_write(IO_FILTER_ARGS)
     IO_HANDLE *handle = (IO_HANDLE *)IO_FILTER_ARGS_FILTER->obj;
 
     // Get socket from handle
-    struct file_desc_t *fd = (struct file_desc_t *)get_machine_desc(*handle);
+    struct file_desc_t *fd = (struct file_desc_t *)machine_get_desc(*handle);
     if (!fd) {
         *IO_FILTER_ARGS_BYTES = 0;
         return IO_ERROR;
@@ -164,7 +164,7 @@ file_read(IO_FILTER_ARGS)
     IO_HANDLE *handle = (IO_HANDLE *)IO_FILTER_ARGS_FILTER->obj;
 
     // Get socket from handle
-    struct file_desc_t *fd = (struct file_desc_t *)get_machine_desc(*handle);
+    struct file_desc_t *fd = (struct file_desc_t *)machine_get_desc(*handle);
     if (!fd) {
         *IO_FILTER_ARGS_BYTES = 0;
         return IO_ERROR;
@@ -226,48 +226,6 @@ file_read(IO_FILTER_ARGS)
 
     pthread_mutex_unlock(lock);
     *IO_FILTER_ARGS_BYTES = total;
-    return IO_SUCCESS;
-}
-
-static enum io_status
-init_filters(struct file_desc_t *f)
-{
-    struct machine_desc_t *d = (struct machine_desc_t *)f;
-    POOL *pool = d->pool;
-
-    // Create io descriptors
-    d->io_read = (struct io_desc *)pcalloc(pool, sizeof(struct io_desc));
-    d->io_write = (struct io_desc *)pcalloc(pool, sizeof(struct io_desc));
-
-    d->io_read->alloc = pool;
-    d->io_write->alloc = pool;
-
-    // Create base filters
-    struct io_filter_t *fil;
-    IO_HANDLE *h;
-
-    // Read Filter
-    fil = create_filter(pool, "_file", file_read);
-    if (!fil) {
-        printf("Failed to initialize read filter\n");
-        return IO_ERROR;
-    }
-    h = palloc(fil->alloc, sizeof(IO_HANDLE));
-    *h = d->handle;
-    fil->obj = h;
-    d->io_read->obj = fil;
-
-    // Write Filter
-    fil = create_filter(pool, "_file", file_write);
-    if (!fil) {
-        printf("Failed to initialize read filter\n");
-        return IO_ERROR;
-    }
-    h = palloc(fil->alloc, sizeof(IO_HANDLE));
-    *h = d->handle;
-    fil->obj = h;
-    d->io_write->obj = fil;
-
     return IO_SUCCESS;
 }
 
@@ -344,7 +302,6 @@ create_file(void *arg)
 
     pthread_mutex_init(&d->lock, NULL);
     d->pool = p;
-    d->handle = request_handle(file_machine);
 
     desc->fname = build_filepath_str(p, args);
     if (!desc->fname) {
@@ -357,23 +314,35 @@ create_file(void *arg)
     desc->rp = 0;
     desc->wp = 0;
 
-    int status = init_filters(desc);
-    if (status != IO_SUCCESS) {
-        printf("ERROR: Failed to initialize filters\n");
+    if (machine_desc_init(p, file_machine, (IO_DESC *)desc) != IO_SUCCESS) {
         pfree(p);
         return 0;
     }
 
-    add_machine_desc(d);
-    return d->handle;
+    if (!filter_read_init(p, "_file", file_read, (IO_DESC *)desc)) {
+        printf("ERROR: Failed to initialize read filter\n");
+        pfree(p);
+        return 0;
+    }
+
+    if (!filter_write_init(p, "_file", file_write, (IO_DESC *)desc)) {
+        printf("ERROR: Failed to initialize write filter\n");
+        pfree(p);
+        return 0;
+    }
+
+    IO_HANDLE h;
+    machine_register_desc((IO_DESC *)desc, &h);
+
+    return h;
 }
 
 static void
 destroy_file(IO_HANDLE h)
 {
-    struct file_desc_t *desc = (struct file_desc_t *)get_machine_desc(h);
+    struct file_desc_t *desc = (struct file_desc_t *)machine_get_desc(h);
     fclose(desc->f);
-    destroy_machine_desc(h);
+    machine_destroy_desc(h);
 }
 
 const IOM*
@@ -386,10 +355,6 @@ get_file_machine()
         machine->create = create_file;
         machine->destroy = destroy_file;
         machine->stop = machine_disable_read;
-        machine->lock = machine_desc_lock;
-        machine->unlock = machine_desc_unlock;
-        machine->get_read_desc = get_read_desc;
-        machine->get_write_desc = get_write_desc;
         machine->read = machine_desc_read;
         machine->write = machine_desc_write;
         machine->obj = NULL;

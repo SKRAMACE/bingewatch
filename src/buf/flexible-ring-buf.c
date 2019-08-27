@@ -22,7 +22,7 @@ static IOM *ring_buffer_machine = NULL;
 
 // Ring descriptor
 struct ring_t {
-    struct __buffer_t _b;  // Generic buffer
+    IO_DESC _b;  // Generic buffer
 
     uint64_t size;         // Total capacity in all blocks (in bytes)
     uint64_t bytes;        // Total data written in all blocks (in bytes)
@@ -42,7 +42,7 @@ buf_read(IO_FILTER_ARGS)
     IO_HANDLE *handle = (IO_HANDLE *)IO_FILTER_ARGS_FILTER->obj;
 
     // Get ring from handle
-    struct ring_t *ring = (struct ring_t *)blb_get_buffer(*handle);
+    struct ring_t *ring = (struct ring_t *)machine_get_desc(*handle);
     if (!ring) {
         *IO_FILTER_ARGS_BYTES = 0;
         return IO_ERROR;
@@ -115,7 +115,7 @@ buf_write(IO_FILTER_ARGS)
     IO_HANDLE *handle = (IO_HANDLE *)IO_FILTER_ARGS_FILTER->obj;
 
     // Get ring from handle
-    struct ring_t *ring = (struct ring_t *)blb_get_buffer(*handle);
+    struct ring_t *ring = (struct ring_t *)machine_get_desc(*handle);
     if (!ring) {
         *IO_FILTER_ARGS_BYTES = 0;
         return IO_ERROR;
@@ -134,7 +134,17 @@ buf_write(IO_FILTER_ARGS)
     while (remaining) {
         uint64_t _bytes = (remaining < b->size) ? remaining : b->size;
 
-        memcpy(b->data, IO_FILTER_ARGS_BUF, _bytes);
+        char *tmp_b_data = b->data;
+        char *tmp_f_buf = IO_FILTER_ARGS_BUF;
+        uint64_t tmp_r = _bytes;
+        while (tmp_r > 0) {
+            *tmp_b_data = *tmp_f_buf;
+            tmp_b_data++;
+            tmp_f_buf++;
+            tmp_r--;
+        }
+
+        //memcpy(b->data, IO_FILTER_ARGS_BUF, _bytes);
         remaining -= _bytes;
         IO_FILTER_ARGS_BUF += _bytes;
         written += _bytes;
@@ -181,49 +191,13 @@ buf_write(IO_FILTER_ARGS)
 }
 
 /*
- * Create new filters to interface directly with the ring buffer
- */
-static enum io_status
-init_filters(struct ring_t *ring)
-{
-    struct __buffer_t *b = (struct __buffer_t *)ring;
-    if (b->handle == 0) {
-        b->handle = request_handle(ring_buffer_machine);
-    }
-
-    struct io_filter_t *filter;
-    filter = create_filter(b->pool, "_buf", buf_read);
-    if (!filter) {
-        printf("Failed to initialize read filter\n");
-        return IO_ERROR;
-    }
-
-    IO_HANDLE *handle = palloc(filter->alloc, sizeof(IO_HANDLE));
-    *handle = b->handle;
-    filter->obj = handle;
-    b->io_read->obj = filter;
-
-    filter = create_filter(b->pool, "_buf", buf_write);
-    if (!filter) {
-        printf("Failed to initialize write filter\n");
-        return IO_ERROR;
-    }
-    handle = palloc(filter->alloc, sizeof(IO_HANDLE));
-    *handle = b->handle;
-    filter->obj = handle;
-    b->io_write->obj = filter;
-
-    return IO_SUCCESS;
-}
-
-/*
  * Create/destroy ring buffers
  */
 static void
 destroy_rb_machine(IO_HANDLE h)
 {
     printf("Destroying buffer %d\n", h);
-    blb_destroy(h);
+    machine_destroy_desc(h);
 }
 
 static inline void
@@ -272,6 +246,10 @@ sanitize_args(struct rbiom_args *args)
     pthread_mutex_unlock(&rb_machine_lock);
 }
 
+#define MACHINE_CRATE_IMPL() \
+    POOL *p = create_subpool(alloc);\
+    if (!p) { printf("ERROR: Filed to create memory pool\n"); return 0; }\
+
 static IO_HANDLE
 create_buffer(void *arg)
 {
@@ -286,13 +264,6 @@ create_buffer(void *arg)
     struct ring_t *ring = pcalloc(p, sizeof(struct ring_t));
     if (!ring) {
         printf("ERROR: Failed to allocate %" PRIx64 " bytes for ring descriptor\n", sizeof(struct ring_t));
-        pfree(p);
-        return 0;
-    }
-
-    // Initialize generic buffer
-    struct __buffer_t *b = (struct __buffer_t *)ring;
-    if (blb_init_struct(p, b) != IO_SUCCESS) {
         pfree(p);
         return 0;
     }
@@ -331,17 +302,27 @@ create_buffer(void *arg)
     pthread_mutex_init(&ring->wlock, NULL);
     pthread_mutex_init(&ring->rlock, NULL);
 
-    b->handle = request_handle(ring_buffer_machine);
-
-    int status = init_filters(ring);
-    if (status != IO_SUCCESS) {
-        printf("ERROR: Failed to initialize filters\n");
-        pfree(b->pool);
+    if (machine_desc_init(p, ring_buffer_machine, (IO_DESC *)ring) != IO_SUCCESS) {
+        pfree(p);
         return 0;
     }
 
-    blb_add_buffer(b);
-    return b->handle;
+    if (!filter_read_init(p, "_buf", buf_read, (IO_DESC *)ring)) {
+        printf("ERROR: Failed to initialize read filter\n");
+        pfree(p);
+        return 0;
+    }
+
+    if (!filter_write_init(p, "_buf", buf_write, (IO_DESC *)ring)) {
+        printf("ERROR: Failed to initialize write filter\n");
+        pfree(p);
+        return 0;
+    }
+
+    IO_HANDLE h;
+    machine_register_desc((IO_DESC *)ring, &h);
+
+    return h;
 }
 
 void
@@ -370,26 +351,25 @@ get_rb_machine()
         machine->create = create_buffer;
         machine->destroy = destroy_rb_machine;
 
-        blb_init_machine_functions(machine);
-
         ring_buffer_machine = machine;
     }
     return (const IOM *)machine;
 }
 
-IO_HANDLE
-new_rb_machine(uint64_t buffer_size, uint64_t block_size)
+const IOM *
+new_rb_machine(IO_HANDLE *h, uint64_t buffer_size, uint64_t block_size)
 {
     const IOM *rb_machine = get_rb_machine();
 
     struct rbiom_args rb_args = {buffer_size, block_size};
-    return rb_machine->create(&rb_args);
+    *h = rb_machine->create(&rb_args);
+    return rb_machine;
 }
 
 uint64_t
 rb_get_size(IO_HANDLE h)
 {
-    struct ring_t *ring = (struct ring_t *)blb_get_buffer(h);
+    struct ring_t *ring = (struct ring_t *)machine_get_desc(h);
     if (!ring) {
         return 0;
     }
@@ -399,7 +379,7 @@ rb_get_size(IO_HANDLE h)
 uint64_t
 rb_get_bytes(IO_HANDLE h)
 {
-    struct ring_t *ring = (struct ring_t *)blb_get_buffer(h);
+    struct ring_t *ring = (struct ring_t *)machine_get_desc(h);
     if (!ring) {
         return 0;
     }
