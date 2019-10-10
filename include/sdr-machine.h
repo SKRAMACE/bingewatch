@@ -38,9 +38,9 @@ struct sdr_channel_t {
     IO_HANDLE handle;
     char in_use;
 
-    float freq;
-    float rate;
-    float bandwidth;
+    double freq;
+    double rate;
+    double bandwidth;
     float gain;
     enum sdr_chan_direction_e dir;
     char init;
