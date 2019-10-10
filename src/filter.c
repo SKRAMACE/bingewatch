@@ -6,21 +6,10 @@
 #include "machine.h"
 #include "filter.h"
 
-/*
-// TODO: Explore the option of using macros, helpers, or templates to streamline filter creation
-#define DECLARE_FILTER(name) \
-    int _filter_##name(IO_FILTER_ARGS);\
-    int filter_##name(IO_FILTER_ARGS) {\
-        if (!f->enabled) { return CALL_NEXT_FILTER(); }\
-    }\
-    int _filter_##name(IO_FILTER_ARGS)
-
-DECLARE_FILTER(generic)
-{
-    CALL_NEXT_FILTER();
-    printf("Generic Stuff\n");
-}
-*/
+struct fb_ctl_t {
+    char *filter_buf;
+    uint32_t bytes;
+};
 
 struct io_filter_t *
 create_filter(void *alloc, const char *name, io_filter_fn fn)
@@ -183,6 +172,127 @@ add_write_filter(IO_HANDLE h, struct io_filter_t *addme)
 
     // Add the new filter as the new input
     io->obj = addme;
+    machine->unlock(h);
+}
+
+static int
+feedback_metric_fn(IO_FILTER_ARGS)
+{
+    // Dereference filter variables
+    IO_FILTER *metric = (IO_FILTER *)IO_FILTER_ARGS_FILTER->obj;
+
+    int ret = CALL_FILTER_PASS_ARGS(metric);
+
+    if (ret == IO_SUCCESS) {
+        ret = CALL_NEXT_FILTER();
+    }
+
+    return ret;
+}
+
+static int
+feedback_controller_fn(IO_FILTER_ARGS)
+{
+    int ret = IO_ERROR;
+
+    // Dereference filter variables
+    enum io_filter_direction dir = IO_FILTER_ARGS_FILTER->direction;
+    struct fb_ctl_t *fb = (struct fb_ctl_t *)IO_FILTER_ARGS_FILTER->obj;
+    POOL *p = (POOL *)IO_FILTER_ARGS_FILTER->alloc;
+
+    // Loops must be WRITE filters
+    if (dir == IOF_READ) {
+        printf("ERROR: %s can not be used as a read filter\n", __FUNCTION__);
+        *IO_FILTER_ARGS_BYTES = 0;
+        return IO_ERROR;
+    }
+
+    // Save off original buffer and size
+    char *caller_buf = (char *)IO_FILTER_ARGS_BUF;
+    uint32_t caller_bytes = *IO_FILTER_ARGS_BYTES;
+
+    // Allocate memory for internal buffer
+    if (fb->bytes < caller_bytes) {
+        fb->filter_buf = repalloc(fb->filter_buf, caller_bytes, p);
+    }
+
+    // Copy original buffer, and call next filter, as long as the
+    // feedback_metric mechanism responds with IO_CONTINUE
+    do {
+        memcpy(fb->filter_buf, caller_buf, caller_bytes);
+        *IO_FILTER_ARGS_BYTES = caller_bytes;
+        ret = CALL_NEXT_FILTER_BUF(fb->filter_buf, IO_FILTER_ARGS_BYTES);
+    } while (ret == IO_CONTINUE);
+
+    return ret;
+}
+
+static struct io_filter_t *
+add_feedback_controller(void *alloc, struct io_filter_t *head, struct io_filter_t *feedback,
+    struct io_filter_t *metric)
+{
+    // Create controller filter
+    IO_FILTER *fc = create_filter(alloc, "feedback_controller", feedback_controller_fn);
+    struct fb_ctl_t *ctl = (struct fb_ctl_t *)palloc(alloc, sizeof(struct fb_ctl_t));
+    ctl->filter_buf = NULL;
+    ctl->bytes = 0;
+    fc->obj = ctl;
+
+    // Create metric filter
+    IO_FILTER *fm = create_filter(alloc, "feedback_metric", feedback_metric_fn);
+    fm->obj = metric;
+
+    // Add feedback controller after feedback filter
+    fm->next = feedback->next;
+    feedback->next = fm;
+
+    // Add feedback controller before feedback target (head)
+    fc->next = head;
+
+    return fc;
+}
+
+void
+add_feedback_write_filter(IO_HANDLE h, struct io_filter_t *addme,
+    struct io_filter_t *feedback, struct io_filter_t *feedback_metric)
+{
+    // Get write filter from IOM write descriptor
+    const IOM *machine = get_machine_ref(h);
+    machine->lock(h);
+    struct io_desc *io = machine->get_write_desc(h);
+    struct io_filter_t *machine_fil = (struct io_filter_t *)io->obj;
+
+    // Find feedback filter in machine filter
+    struct io_filter_t *f = machine_fil;
+    while (f) {
+        if (f == feedback) {
+            break;
+        }
+        f = f->next;
+    }
+
+    // If the feedback filter can't be found, return with error message
+    if (!f) {
+        printf("ERROR: Could not find feedback filter in IOM %d\n", h);
+        return;
+    }
+
+    // Find end of filter chain
+    f = addme;
+    while (f->next) {
+        f->direction = IOF_WRITE;
+        f = f->next;
+    }
+    addme->direction = IOF_WRITE;
+
+    // Link the new filter chain to the "write" input filter
+    f->next = machine_fil;
+
+    // Create the feedback controller
+    struct io_filter_t *fbc = add_feedback_controller(io->alloc, addme, feedback, feedback_metric);
+
+    // Add the new filter as the new input
+    io->obj = fbc;
     machine->unlock(h);
 }
 

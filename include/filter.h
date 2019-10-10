@@ -66,6 +66,9 @@ typedef struct io_filter_t {
 // Call the next filter with custom args
 #define CALL_NEXT_FILTER_ARGS(...) _iof_filter->next->call(_iof_filter->next, __VA_ARGS__)
 
+// Call the next filter with custom args
+#define CALL_FILTER_PASS_ARGS(f) f->call(f, _iof_buf, _iof_bytes, _iof_block, _iof_align)
+
 struct io_filter_t *create_filter(void *alloc, const char *name, io_filter_fn fn);
 struct io_filter_t *get_io_filter(struct io_filter_t *filter, const char *name);
 void io_filter_enable(struct io_filter_t *filter, const char *name);
@@ -74,6 +77,7 @@ void register_write_filter(int h, io_filter_fn fn, const char *name);
 void register_read_filter(int h, io_filter_fn fn, const char *name);
 void add_write_filter(int h, struct io_filter_t *addme);
 void add_read_filter(int h, struct io_filter_t *addme);
+void add_feedback_write_filter(IO_HANDLE h, struct io_filter_t *addme, struct io_filter_t *feedback, struct io_filter_t *feedback_metric);
 struct io_filter_t *filter_read_init(POOL *p, const char *name, io_filter_fn fn, IO_DESC *d);
 struct io_filter_t *filter_write_init(POOL *p, const char *name, io_filter_fn fn, IO_DESC *d);
 

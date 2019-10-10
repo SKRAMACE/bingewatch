@@ -19,9 +19,10 @@ typedef int IO_HANDLE;
 
 /***** Creating Machines *****/
 enum io_status {
-    IO_SUCCESS = 0,
-    IO_ERROR,
-    IO_COMPLETE,
+    IO_SUCCESS = 0,         // Universal success
+    IO_ERROR,               // Generic error
+    IO_COMPLETE,            // Treated like a success, but triggers a "stop"
+    IO_CONTINUE,            // Used to commuincate iterations
     IO_IMPLEMENTATION=100,
 };
 
