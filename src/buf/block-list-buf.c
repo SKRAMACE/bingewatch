@@ -31,7 +31,7 @@ block_list_alloc_custom(POOL *p, size_t size_of, size_t block_count)
     while (remaining--) {
         struct __block_t *new = pcalloc(p, size_of);
         if (!new) {
-            printf("Failed to allocate %" PRIu64 " bytes for block descriptor\n", size_of);
+            printf("Failed to allocate %zu bytes for block descriptor\n", size_of);
             return NULL;
         }
 
@@ -65,7 +65,7 @@ block_data_alloc(POOL *p, void *block, size_t bytes_per_block) {
         b->bytes = 0;
         b->size = bytes_per_block;
         if (!b->data) {
-            printf("Failed to allocate %" PRIu64 " bytes for block data\n", bytes_per_block);
+            printf("Failed to allocate %zu bytes for block data\n", bytes_per_block);
             return IO_ERROR;
         }
         b = b->next;
@@ -90,7 +90,7 @@ block_data_fastalloc(POOL *p, void *block, size_t bytes_per_block) {
     // One alloc (hence "fastalloc")
     char *buf = palloc(p, total_bytes);
     if (!buf) {
-        printf("Failed to allocate %" PRIu64 " bytes for block data\n", total_bytes);
+        printf("Failed to allocate %zu bytes for block data\n", total_bytes);
         return IO_ERROR;
     }
 

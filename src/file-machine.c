@@ -295,7 +295,7 @@ create_file(void *arg)
     struct machine_desc_t *d = (struct machine_desc_t *)desc;
 
     if (!desc) {
-        printf("ERROR: Failed to allocate %" PRIx64 " bytes for file descriptor\n", sizeof(struct file_desc_t));
+        printf("ERROR: Failed to allocate %#zx bytes for file descriptor\n", sizeof(struct file_desc_t));
         pfree(p);
         return 0;
     }

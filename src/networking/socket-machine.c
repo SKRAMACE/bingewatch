@@ -395,7 +395,7 @@ create_sock(void *arg)
 
     struct sock_t *sock = pcalloc(p, sizeof(struct sock_t));
     if (!sock) {
-        printf("ERROR: Failed to allocate %" PRIx64 " bytes for sock descriptor\n", sizeof(struct sock_t));
+        printf("ERROR: Failed to allocate %#zx bytes for sock descriptor\n", sizeof(struct sock_t));
         pfree(p);
         return 0;
     }

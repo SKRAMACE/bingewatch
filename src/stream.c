@@ -201,10 +201,10 @@ cleanup_segment(struct io_segment_t *seg)
         printf("          -> %s:\n", dst1->name);
     }
     printf("metric %s -> %s:\n", src->name, dst->name);
-    printf("  src: %" PRIu64 "\n", seg->in_stats.total_bytes);
-    printf("  dst: %" PRIu64 "\n\n", seg->out_stats.total_bytes);
+    printf("  src: %zu\n", seg->in_stats.total_bytes);
+    printf("  dst: %zu\n\n", seg->out_stats.total_bytes);
     if (dst1) {
-        printf("  dst: %" PRIu64 "\n\n", seg->out1_stats.total_bytes);
+        printf("  dst: %zu\n\n", seg->out1_stats.total_bytes);
     }
 
     pthread_mutex_unlock(seg->lock);

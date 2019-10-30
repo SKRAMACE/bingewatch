@@ -206,11 +206,11 @@ sanitize_args(struct rbiom_args *args)
     pthread_mutex_lock(&rb_machine_lock);
     // Set null values to defaults
     if (0 == args->buf_bytes) {
-        //printf("Using default buffer size: %" PRIu64 "\n", default_buf_bytes);
+        //printf("Using default buffer size: %zu\n", default_buf_bytes);
         args->buf_bytes = default_buf_bytes;
     }
     if (0 == args->block_bytes) {
-        //printf("Using default block size: %" PRIu64 "\n", default_blk_bytes);
+        //printf("Using default block size: %zu\n", default_blk_bytes);
         args->block_bytes = default_blk_bytes;
     }
     if (0 == args->align) {
@@ -240,7 +240,7 @@ sanitize_args(struct rbiom_args *args)
     size_t a = (size_t)args->align;
     size_t adjust = (a - (args->block_bytes & (a - 1))) & (a - 1);
     if (adjust > 0) {
-        //printf("Invalid block alignment, adjusting from %" PRIu64 " to %" PRIu64 "\n", args->block_bytes, args->block_bytes + adjust);
+        //printf("Invalid block alignment, adjusting from %zu to %zu\n", args->block_bytes, args->block_bytes + adjust);
         args->block_bytes += adjust;
     }
     pthread_mutex_unlock(&rb_machine_lock);
@@ -263,7 +263,7 @@ create_buffer(void *arg)
     // Create a new buffer descriptor
     struct ring_t *ring = pcalloc(p, sizeof(struct ring_t));
     if (!ring) {
-        printf("ERROR: Failed to allocate %" PRIx64 " bytes for ring descriptor\n", sizeof(struct ring_t));
+        printf("ERROR: Failed to allocate %#zx bytes for ring descriptor\n", sizeof(struct ring_t));
         pfree(p);
         return 0;
     }
