@@ -66,7 +66,7 @@ buf_read(IO_FILTER_ARGS)
         memcpy(IO_FILTER_ARGS_BUF, b->data, bytes);
         *IO_FILTER_ARGS_BYTES = bytes;
     } else {
-        printf("WARNING: block length (%ld) exceeds return buffer (%ld).  Ignoring this block\n",
+        printf("WARNING: block length (%zu) exceeds return buffer (%zu).  Ignoring this block\n",
             b->bytes, *IO_FILTER_ARGS_BYTES);
         *IO_FILTER_ARGS_BYTES = 0;
     }
@@ -101,7 +101,7 @@ buf_write(IO_FILTER_ARGS)
 
     if (*IO_FILTER_ARGS_BYTES > b->size) {
         pthread_mutex_unlock(&ring->wlock);
-        printf("WARNING: Input buffer (%ld) exceeds block length (%ld).  Ignoring input bytes\n",
+        printf("WARNING: Input buffer (%zu) exceeds block length (%zu).  Ignoring input bytes\n",
             *IO_FILTER_ARGS_BYTES, b->size);
         return IO_SUCCESS;
     }

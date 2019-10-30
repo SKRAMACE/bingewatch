@@ -286,7 +286,7 @@ create_device(POOL *p, void *args)
     // Success!  Now, create the IOM structs
     struct soapy_device_t *dev = pcalloc(p, sizeof(struct soapy_device_t));
     if (!dev) {
-        printf("ERROR: Failed to allocate %ld bytes for sdr device\n",
+        printf("ERROR: Failed to allocate %zu bytes for sdr device\n",
             sizeof(struct soapy_device_t));
         pfree(p);
         return 0;
