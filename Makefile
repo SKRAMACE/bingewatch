@@ -36,9 +36,14 @@ endif
 .IGNORE: clean
 .PHONY: install clean uninstall
 
+TESTLIBS = \
+    -lradpool \
+    -lpthread \
+
 BUF = \
 	block-list-buf.c \
 	flexible-ring-buf.c \
+	fixed-block-buf.c \
 
 SDR = \
     sdr-rx-machine.c \
@@ -65,6 +70,12 @@ SRC = \
 $(LIB): $(SRC)
 	$(CC) $^ $(INC) $(LDFLAGS) $(LCFLAGS) -o $@
 
+%.o: %.c
+	$(CC) $(INC) -I/usc/local/include -Werror -ggdb -c $^
+
+tests: machine.c machine-mgmt.c filter.c $(BUF)
+	$(CC) test/simple-buffer-test.c $^ $(INC) -o test/bin/simple-buffer-test $(TESTLIBS)
+
 install: $(LIB)
 	install -m 0755 $(LIB) -D $(DESTDIR)$(libdir)/$(LIBFILE)
 	cd $(DESTDIR)$(libdir); \
@@ -87,3 +98,4 @@ endif
 clean:
 	rm -f *.o
 	rm -f $(LIB)*
+	rm -f test/bin/* 
