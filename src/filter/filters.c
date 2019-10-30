@@ -8,9 +8,9 @@
 #include "filter.h"
 
 struct generic_counter_t {
-    uint64_t total;
-    uint64_t limit;
-    uint64_t period;
+    size_t total;
+    size_t limit;
+    size_t period;
 };
 
 static int
@@ -42,7 +42,7 @@ byte_count_limiter(IO_FILTER_ARGS)
 }
 
 struct io_filter_t *
-create_byte_count_limit_filter(void *alloc, const char *name, uint64_t byte_limit)
+create_byte_count_limit_filter(void *alloc, const char *name, size_t byte_limit)
 {
     struct io_filter_t *f = create_filter(alloc, name, byte_count_limiter);
     struct generic_counter_t *limit = palloc(alloc, sizeof(struct generic_counter_t));
@@ -77,7 +77,7 @@ byte_counter(IO_FILTER_ARGS)
 }
 
 struct io_filter_t *
-create_byte_counter_filter(void *alloc, const char *name, uint64_t bytes_per_sample)
+create_byte_counter_filter(void *alloc, const char *name, size_t bytes_per_sample)
 {
     struct io_filter_t *f = create_filter(alloc, name, byte_counter);
     struct generic_counter_t *limit = palloc(alloc, sizeof(struct generic_counter_t));
@@ -101,6 +101,6 @@ dump_to_binfile(IO_FILTER_ARGS)
         snprintf(filename, 64, "test_data_%s", seg_name);
         outfile = fopen(filename, "wb");
     }
-    uint64_t bytes_written = fwrite(IO_FILTER_ARGS_BUF, sizeof(uint8_t), *IO_FILTER_ARGS_BYTES, outfile);
+    size_t bytes_written = fwrite(IO_FILTER_ARGS_BUF, sizeof(uint8_t), *IO_FILTER_ARGS_BYTES, outfile);
     return ret;
 }

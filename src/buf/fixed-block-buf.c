@@ -14,8 +14,8 @@
 #define DEFAULT_BLK_BYTES   1*MB
 #define DEFAULT_ALIGN 4
 
-static uint64_t default_buf_bytes = DEFAULT_BUF_BYTES;
-static uint64_t default_blk_bytes = DEFAULT_BLK_BYTES;
+static size_t default_buf_bytes = DEFAULT_BUF_BYTES;
+static size_t default_blk_bytes = DEFAULT_BLK_BYTES;
 static uint16_t default_align = DEFAULT_ALIGN;
 
 static IOM *ring_buffer_machine = NULL;
@@ -24,13 +24,13 @@ static IOM *ring_buffer_machine = NULL;
 struct ring_t {
     IO_DESC _b;  // Generic buffer
 
-    uint64_t size;         // Total capacity in all blocks (in bytes)
-    uint64_t bytes;        // Total data written in all blocks (in bytes)
+    size_t size;         // Total capacity in all blocks (in bytes)
+    size_t bytes;        // Total data written in all blocks (in bytes)
     struct __block_t *wp;  // Pointer to next write (empty) block
     struct __block_t *rp;  // Pointer to next read (filled) block
     pthread_mutex_t wlock; // Mutex lock for writing to this ring
     pthread_mutex_t rlock; // Mutex lock for reading to this ring
-    uint64_t block_size;   // Bytes per block
+    size_t block_size;   // Bytes per block
     int fill;
 };
 
@@ -53,9 +53,9 @@ buf_read(IO_FILTER_ARGS)
 
     // Initialize read vars
     pthread_mutex_t *lock = &ring->_b.lock;
-    uint64_t bytes_read = 0;
+    size_t bytes_read = 0;
 
-    uint64_t bytes = b->bytes;
+    size_t bytes = b->bytes;
 
     // Align bytes
     while (bytes % IO_FILTER_ARGS_ALIGN != 0) {
@@ -108,7 +108,7 @@ buf_write(IO_FILTER_ARGS)
 
     // Initialize write vars
     pthread_mutex_t *lock = &ring->_b.lock;
-    uint64_t remaining = *IO_FILTER_ARGS_BYTES;
+    size_t remaining = *IO_FILTER_ARGS_BYTES;
 
     // Write input bytes to buffer
     size_t bytes = *IO_FILTER_ARGS_BYTES;
@@ -124,7 +124,7 @@ buf_write(IO_FILTER_ARGS)
     // Expand buffer, if the next block isn't empty
     if (!BLOCK_EMPTY(next)) {
         // Add enough space + 1 extra block
-        uint64_t block_count = (remaining / ring->block_size) + 1;
+        size_t block_count = (remaining / ring->block_size) + 1;
 
         struct __block_t *add = block_list_alloc(ring->_b.pool, block_count);
         block_data_fastalloc(ring->_b.pool, add, ring->block_size);
@@ -198,8 +198,8 @@ sanitize_args(struct fbbiom_args *args)
 
     // Verify that block bytes are properly aligned
     
-    uint64_t a = (uint64_t)args->align;
-    uint64_t adjust = (a - (args->block_bytes & (a - 1))) & (a - 1);
+    size_t a = (size_t)args->align;
+    size_t adjust = (a - (args->block_bytes & (a - 1))) & (a - 1);
     if (adjust > 0) {
         //printf("Invalid block alignment, adjusting from %" PRIu64 " to %" PRIu64 "\n", args->block_bytes, args->block_bytes + adjust);
         args->block_bytes += adjust;
@@ -229,9 +229,9 @@ create_buffer(void *arg)
     struct fbbiom_args *args = (struct fbbiom_args *)arg;
     sanitize_args(args);
 
-    uint64_t bytes = args->buf_bytes;
-    uint64_t block_size = args->block_bytes;
-    uint64_t block_count = bytes / block_size;
+    size_t bytes = args->buf_bytes;
+    size_t block_size = args->block_bytes;
+    size_t block_count = bytes / block_size;
     if ((block_count * block_size) < bytes) {
         block_count++;
     }
@@ -305,7 +305,7 @@ get_fbb_machine()
 }
 
 const IOM *
-new_fbb_machine_fill(IO_HANDLE *h, uint64_t buffer_size, uint64_t block_size)
+new_fbb_machine_fill(IO_HANDLE *h, size_t buffer_size, size_t block_size)
 {
     const IOM *fbb_machine = get_fbb_machine();
 
@@ -315,7 +315,7 @@ new_fbb_machine_fill(IO_HANDLE *h, uint64_t buffer_size, uint64_t block_size)
 }
 
 const IOM *
-new_fbb_machine(IO_HANDLE *h, uint64_t buffer_size, uint64_t block_size)
+new_fbb_machine(IO_HANDLE *h, size_t buffer_size, size_t block_size)
 {
     const IOM *fbb_machine = get_fbb_machine();
 
@@ -324,7 +324,7 @@ new_fbb_machine(IO_HANDLE *h, uint64_t buffer_size, uint64_t block_size)
     return fbb_machine;
 }
 
-uint64_t
+size_t
 fbb_get_size(IO_HANDLE h)
 {
     struct ring_t *ring = (struct ring_t *)machine_get_desc(h);
@@ -334,7 +334,7 @@ fbb_get_size(IO_HANDLE h)
     return ring->size;
 }
 
-uint64_t
+size_t
 fbb_get_bytes(IO_HANDLE h)
 {
     struct ring_t *ring = (struct ring_t *)machine_get_desc(h);

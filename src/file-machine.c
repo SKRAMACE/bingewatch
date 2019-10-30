@@ -33,8 +33,8 @@ struct file_desc_t {
     enum file_rotate_e rotate;
     uint16_t rotate_index;
     char binary;
-    uint64_t rp;
-    uint64_t wp;
+    size_t rp;
+    size_t wp;
 };
 
 static inline void
@@ -139,13 +139,13 @@ file_write(IO_FILTER_ARGS)
         return IO_ERROR;
     }
     
-    uint64_t remaining = *IO_FILTER_ARGS_BYTES;
+    size_t remaining = *IO_FILTER_ARGS_BYTES;
     remaining -= remaining % IO_FILTER_ARGS_ALIGN;
-    uint64_t total = 0;
+    size_t total = 0;
     char *ptr = IO_FILTER_ARGS_BUF;
 
     while (remaining) {
-        uint64_t b = fwrite(ptr, 1, remaining, fd->f);
+        size_t b = fwrite(ptr, 1, remaining, fd->f);
         remaining -= b;
         ptr += b;
         total += b;
@@ -197,14 +197,14 @@ file_read(IO_FILTER_ARGS)
         return IO_ERROR;
     }
 
-    uint64_t remaining = *IO_FILTER_ARGS_BYTES;
+    size_t remaining = *IO_FILTER_ARGS_BYTES;
     remaining -= remaining % IO_FILTER_ARGS_ALIGN;
 
-    uint64_t total = 0;
+    size_t total = 0;
     char *ptr = IO_FILTER_ARGS_BUF;
 
     while (remaining) {
-        uint64_t b = fread(ptr, 1, remaining, fd->f);
+        size_t b = fread(ptr, 1, remaining, fd->f);
         if (b == 0) {
             int ret = IO_ERROR;
             int eof = feof(fd->f);

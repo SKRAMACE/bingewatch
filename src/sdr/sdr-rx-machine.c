@@ -274,7 +274,7 @@ sdr_rx_get_write_desc(IO_HANDLE h)
 }
 
 static int
-sdr_rx_read(IO_HANDLE h, void *buf, uint64_t *len)
+sdr_rx_read(IO_HANDLE h, void *buf, size_t *len)
 {
     struct sdr_channel_t *c = get_channel(h);
     if (!c) {
@@ -291,7 +291,7 @@ sdr_rx_read(IO_HANDLE h, void *buf, uint64_t *len)
 }
 
 static int
-sdr_rx_write(IO_HANDLE h, void *buf, uint64_t *len)
+sdr_rx_write(IO_HANDLE h, void *buf, size_t *len)
 {
     printf("ERROR: sdr_rx_machine has no write function\n");
     return IO_ERROR;

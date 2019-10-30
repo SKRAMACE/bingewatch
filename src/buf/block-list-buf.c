@@ -17,7 +17,7 @@ static pthread_mutex_t buffer_list_lock = PTHREAD_MUTEX_INITIALIZER;
  * Returns a linked list of empty, custom-sized block descriptors
  */
 struct __block_t *
-block_list_alloc_custom(POOL *p, size_t size_of, uint64_t block_count)
+block_list_alloc_custom(POOL *p, size_t size_of, size_t block_count)
 {
     struct __block_t *blocks = NULL;
     struct __block_t *b = NULL;
@@ -27,7 +27,7 @@ block_list_alloc_custom(POOL *p, size_t size_of, uint64_t block_count)
         return NULL;
     }
 
-    uint32_t remaining = block_count;
+    size_t remaining = block_count;
     while (remaining--) {
         struct __block_t *new = pcalloc(p, size_of);
         if (!new) {
@@ -50,7 +50,7 @@ block_list_alloc_custom(POOL *p, size_t size_of, uint64_t block_count)
  * Returns a linked list of empty block descriptors
  */
 struct __block_t *
-block_list_alloc(POOL *p, uint64_t block_count) {
+block_list_alloc(POOL *p, size_t block_count) {
     return block_list_alloc_custom(p, sizeof(struct __block_t), block_count);
 }
 
@@ -58,7 +58,7 @@ block_list_alloc(POOL *p, uint64_t block_count) {
  * Allocate a fixed number of bytes for each block
  */
 int
-block_data_alloc(POOL *p, void *block, uint64_t bytes_per_block) {
+block_data_alloc(POOL *p, void *block, size_t bytes_per_block) {
     struct __block_t *b = (struct __block_t *)block;
     while (b) {
         b->data = palloc(p, bytes_per_block);
@@ -78,10 +78,10 @@ block_data_alloc(POOL *p, void *block, uint64_t bytes_per_block) {
  * Allocate a large chunk of memory and partition for each block
  */
 int
-block_data_fastalloc(POOL *p, void *block, uint64_t bytes_per_block) {
+block_data_fastalloc(POOL *p, void *block, size_t bytes_per_block) {
     // Count bytes
     struct __block_t *b = (struct __block_t *)block;
-    uint64_t total_bytes = 0;
+    size_t total_bytes = 0;
     while (b) {
         total_bytes += bytes_per_block;
         b = b->next;

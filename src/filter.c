@@ -8,7 +8,7 @@
 
 struct fb_ctl_t {
     char *filter_buf;
-    uint32_t bytes;
+    size_t bytes;
 };
 
 struct io_filter_t *
@@ -209,7 +209,7 @@ feedback_controller_fn(IO_FILTER_ARGS)
 
     // Save off original buffer and size
     char *caller_buf = (char *)IO_FILTER_ARGS_BUF;
-    uint32_t caller_bytes = *IO_FILTER_ARGS_BYTES;
+    size_t caller_bytes = *IO_FILTER_ARGS_BYTES;
 
     // Allocate memory for internal buffer
     if (fb->bytes < caller_bytes) {

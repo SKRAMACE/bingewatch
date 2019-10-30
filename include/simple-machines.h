@@ -30,7 +30,7 @@ struct sockiom_args {
     int rem_ip;
     short rem_port;
     enum af_inet_type socktype;
-    uint32_t payload_size;
+    size_t payload_size;
 };
 
 const IOM *get_sock_machine();

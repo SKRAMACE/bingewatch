@@ -12,7 +12,7 @@
 
 typedef struct conversion_buf_t {
     char *buf;
-    uint64_t len;
+    size_t len;
     int precision;
 } CBUF;
 
@@ -144,11 +144,11 @@ iq_type_conversion(IO_FILTER_ARGS)
     char ratio = max / min;
 
     // Resize the buffer to support the larger format
-    uint64_t buf_len = *IO_FILTER_ARGS_BYTES * ratio;
+    size_t buf_len = *IO_FILTER_ARGS_BYTES * ratio;
     b->buf = repalloc(b->buf, buf_len, IO_FILTER_ARGS_FILTER->alloc);
 
     // Resize the intermediary buffer for the amount of data
-    uint64_t tmp_len = *IO_FILTER_ARGS_BYTES * sizeof(double);
+    size_t tmp_len = *IO_FILTER_ARGS_BYTES * sizeof(double);
     b->tmp = repalloc(b->tmp, tmp_len, IO_FILTER_ARGS_FILTER->alloc);
 
     // Call conversion function with proper ordering and direction

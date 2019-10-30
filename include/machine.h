@@ -29,7 +29,7 @@ enum io_status {
 // Function Types
 typedef IO_HANDLE (*io_creator)(void*);
 typedef void (*io_handle)(IO_HANDLE);
-typedef int (*io_rw)(IO_HANDLE, void*, uint64_t*);
+typedef int (*io_rw)(IO_HANDLE, void*, size_t*);
 typedef struct io_desc *(*io_getter)(IO_HANDLE);
 
 
@@ -52,11 +52,11 @@ typedef struct bw_machine {
     void *alloc;
 
     // Buffer size recommendation: Used by implementor for optimal buffer allocation
-    uint64_t buf_read_size_rec;
-    uint64_t buf_write_size_rec;
+    size_t buf_read_size_rec;
+    size_t buf_write_size_rec;
 
     // Timeout metric
-    uint64_t timeout;
+    size_t timeout;
 
     // Implementation-specific struct
     void *obj;     
@@ -103,8 +103,8 @@ struct io_desc *machine_get_write_desc(IO_HANDLE h);
 void machine_register_desc(struct machine_desc_t *addme, IO_HANDLE *handle);
 struct machine_desc_t *machine_get_desc(IO_HANDLE h);
 void machine_destroy_desc(IO_HANDLE h);
-int machine_desc_read(IO_HANDLE h, void *buf, uint64_t *len);
-int machine_desc_write(IO_HANDLE h, void *buf, uint64_t *len);
+int machine_desc_read(IO_HANDLE h, void *buf, size_t *len);
+int machine_desc_write(IO_HANDLE h, void *buf, size_t *len);
 void machine_disable_write(IO_HANDLE h);
 void machine_disable_read(IO_HANDLE h);
 
@@ -114,8 +114,8 @@ IOM *get_machine(const char *name);
 int machine_desc_init(POOL *p, IOM *machine, IO_DESC *b);
 const IOM *get_machine_ref(IO_HANDLE handle);
 IO_HANDLE request_handle(IOM *machine);
-void machine_set_read_size(IO_HANDLE h, uint32_t len);
-void machine_set_write_size(IO_HANDLE h, uint32_t len);
+void machine_set_read_size(IO_HANDLE h, size_t len);
+void machine_set_write_size(IO_HANDLE h, size_t len);
 void machine_cleanup();
 
 #endif

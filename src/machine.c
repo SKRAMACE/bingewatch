@@ -182,7 +182,7 @@ machine_get_write_desc(IO_HANDLE h)
 }
 
 int
-machine_desc_read(IO_HANDLE h, void *buf, uint64_t *len)
+machine_desc_read(IO_HANDLE h, void *buf, size_t *len)
 {
     struct machine_desc_t *d = machine_get_desc(h);
     if (!d || !d->io_read || !d->io_read->obj) {
@@ -204,7 +204,7 @@ machine_desc_read(IO_HANDLE h, void *buf, uint64_t *len)
 }
 
 int
-machine_desc_write(IO_HANDLE h, void *buf, uint64_t *len)
+machine_desc_write(IO_HANDLE h, void *buf, size_t *len)
 {
     struct machine_desc_t *d = machine_get_desc(h);
     if (!d || !d->io_write || !d->io_write->obj) {

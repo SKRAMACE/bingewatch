@@ -19,7 +19,7 @@ enum io_filter_direction {
 };
 
 struct io_filter_t;
-typedef int (*io_filter_fn)(struct io_filter_t*, void*, uint64_t*, io_block_e, int);
+typedef int (*io_filter_fn)(struct io_filter_t*, void*, size_t*, io_block_e, int);
 
 typedef struct io_filter_t {
     char enabled;
@@ -39,7 +39,7 @@ typedef struct io_filter_t {
 // Standardize the naming convention for filter args
 #define IO_FILTER_ARGS  struct io_filter_t *_iof_filter,\
                         void *_iof_buf,\
-                        uint64_t *_iof_bytes,\
+                        size_t *_iof_bytes,\
                         io_block_e _iof_block,\
                         int _iof_align
 

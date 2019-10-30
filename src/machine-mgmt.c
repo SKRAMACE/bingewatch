@@ -19,7 +19,7 @@ static void name##_noimpl(IO_HANDLE h) { \
 #define NOIMPL(name) name##_noimpl
 
 #define DECLARE_IO_NOIMPL(name) \
-static int name##_noimpl(IO_HANDLE h, void *buf, uint64_t *len) { \
+static int name##_noimpl(IO_HANDLE h, void *buf, size_t *len) { \
     fprintf(stderr, "ERROR: Machine function \"" #name "\" was not implemented\n"); \
 }
 #define IO_NOIMPL(name) name##_noimpl
@@ -131,7 +131,7 @@ machine_register(const char *name)
 IO_HANDLE
 request_handle(IOM *machine)
 {
-    static uint64_t handle_counter = 0;
+    static size_t handle_counter = 0;
 
     if (!handle_map) {
         handle_alloc = MACHINE_CHUNK;
@@ -151,7 +151,7 @@ request_handle(IOM *machine)
 }
 
 void
-machine_set_write_size(IO_HANDLE h, uint32_t len)
+machine_set_write_size(IO_HANDLE h, size_t len)
 {
     IOM *d = get_machine_by_handle(h);
     if (!d) {
@@ -162,7 +162,7 @@ machine_set_write_size(IO_HANDLE h, uint32_t len)
 }
 
 void
-machine_set_read_size(IO_HANDLE h, uint32_t len)
+machine_set_read_size(IO_HANDLE h, size_t len)
 {
     IOM *d = get_machine_by_handle(h);
     if (!d) {

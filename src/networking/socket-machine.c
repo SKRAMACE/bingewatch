@@ -17,17 +17,17 @@
 static IOM *sock_machine = NULL;
 
 static enum af_inet_type default_socktype = AF_INET_NONE;
-static uint32_t default_payload_size = 0;
+static size_t default_payload_size = 0;
 
-static uint64_t default_udp_size = UDP_PACKET_SIZE;
-static uint64_t default_tcp_size = TCP_PACKET_SIZE;
+static size_t default_udp_size = UDP_PACKET_SIZE;
+static size_t default_tcp_size = TCP_PACKET_SIZE;
 
 static struct sock_t {
     int fd; 
     enum af_inet_type socktype;
     struct sockaddr_in srv_addr;
     struct sockaddr_in rem_addr;
-    uint32_t payload_size;
+    size_t payload_size;
     struct sock_t *next;        // Pointer to next ring descriptor
 
     IO_HANDLE handle;         // IO Handle for this buffer
@@ -178,18 +178,18 @@ udp_read(IO_FILTER_ARGS)
         return IO_ERROR;
     }
 
-    uint64_t remaining = *IO_FILTER_ARGS_BYTES;
-    uint64_t total_read = 0;
+    size_t remaining = *IO_FILTER_ARGS_BYTES;
+    size_t total_read = 0;
 
     while (remaining) {
-        uint64_t b = (remaining > sock->payload_size) ? sock->payload_size : remaining;
+        size_t b = (remaining > sock->payload_size) ? sock->payload_size : remaining;
 
         struct sockaddr_in remote;
         socklen_t len = sizeof(remote);
 
         pthread_mutex_lock(&sock->lock);
         struct sockaddr *addr = (struct sockaddr *)&remote;
-        uint32_t bytes_rcvd = recvfrom(sock->fd, IO_FILTER_ARGS_BUF, b, 0, addr, &len);
+        size_t bytes_rcvd = recvfrom(sock->fd, IO_FILTER_ARGS_BUF, b, 0, addr, &len);
         pthread_mutex_unlock(&sock->lock);
 
         if (bytes_rcvd == 0) {
@@ -222,12 +222,12 @@ udp_write(IO_FILTER_ARGS)
         return IO_ERROR;
     }
 
-    uint64_t written = 0;
-    uint64_t remaining = *IO_FILTER_ARGS_BYTES;
+    size_t written = 0;
+    size_t remaining = *IO_FILTER_ARGS_BYTES;
 
     pthread_mutex_lock(&sock->lock);
     while (remaining) {
-        uint64_t b = (remaining > sock->payload_size) ? sock->payload_size : remaining;
+        size_t b = (remaining > sock->payload_size) ? sock->payload_size : remaining;
 
         struct sockaddr *addr = (struct sockaddr *)&sock->rem_addr;
         int bytes_sent = sendto(sock->fd, IO_FILTER_ARGS_BUF, b, 0, addr, sizeof(struct sockaddr_in));
@@ -435,7 +435,7 @@ create_sock(void *arg)
 }
 
 static int
-sock_read(IO_HANDLE h, void *buf, uint64_t *len)
+sock_read(IO_HANDLE h, void *buf, size_t *len)
 {
     struct sock_t *sock = get_socket(h);
     if (!sock) {
@@ -455,7 +455,7 @@ sock_read(IO_HANDLE h, void *buf, uint64_t *len)
  * Write "len" bytes to the socket with handle==h
  */
 static int
-sock_write(IO_HANDLE h, void *buf, uint64_t *len)
+sock_write(IO_HANDLE h, void *buf, size_t *len)
 {
     struct sock_t *sock = get_socket(h);
     if (!sock) {

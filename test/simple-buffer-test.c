@@ -6,8 +6,8 @@
 #include "simple-buffers.h"
 
 static void
-print_buf(char *buf, uint64_t bytes) {
-    uint64_t i = 0;
+print_buf(char *buf, size_t bytes) {
+    size_t i = 0;
 
     if (0 == bytes) {
         printf("0 bytes\n");
@@ -27,7 +27,7 @@ main(int argc, char *argv[]) {
     const IOM *fbb = new_fbb_machine(&h, 2, 10);
 
     char buf[20];
-    uint64_t bytes;
+    size_t bytes;
 
     memset(buf, 'A', 20);
     bytes = 20;

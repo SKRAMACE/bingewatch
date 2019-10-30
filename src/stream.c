@@ -44,7 +44,7 @@ enum iostream_seg_ctrl_e {
 
 #define METRIC_SAMPLE_THRESHOLD (100*MB)
 struct benchmark_t {
-    uint64_t total_bytes;
+    size_t total_bytes;
     float bytes;
     struct timeval t0;
     struct timeval t1;
@@ -331,7 +331,7 @@ get_segment(IO_SEGMENT h)
 }
 
 static void
-calculate_metrics(struct benchmark_t *bm, uint64_t bytes)
+calculate_metrics(struct benchmark_t *bm, size_t bytes)
 {
     if (!bm) {
         return;
@@ -342,8 +342,8 @@ calculate_metrics(struct benchmark_t *bm, uint64_t bytes)
     gettimeofday(&bm->t1, NULL);
 
     if (bm->bytes > METRIC_SAMPLE_THRESHOLD) {
-        uint64_t t0_us = (1000000 * bm->t0.tv_sec) + bm->t0.tv_usec;
-        uint64_t t1_us = (1000000 * bm->t1.tv_sec) + bm->t1.tv_usec;
+        size_t t0_us = (1000000 * bm->t0.tv_sec) + bm->t0.tv_usec;
+        size_t t1_us = (1000000 * bm->t1.tv_sec) + bm->t1.tv_usec;
         double elapsed_us = (t1_us - t0_us);
         bm->tp = (8 * bm->bytes)/elapsed_us;
         //printf("%f Mb/s\n", bm->tp);
@@ -354,7 +354,7 @@ calculate_metrics(struct benchmark_t *bm, uint64_t bytes)
 }
 
 static inline enum iostream_seg_ctrl_e
-read_from_source(const IOM *src, struct io_segment_t *seg, char *buf, uint64_t *bytes)
+read_from_source(const IOM *src, struct io_segment_t *seg, char *buf, size_t *bytes)
 {
     enum io_status status = src->read(seg->in, buf, bytes);
     switch (status) {
@@ -385,7 +385,7 @@ read_from_source(const IOM *src, struct io_segment_t *seg, char *buf, uint64_t *
 }
 
 static inline enum iostream_seg_ctrl_e
-write_to_dest(const IOM *dst, int out_index, struct io_segment_t *seg, char *buf, uint64_t *bytes)
+write_to_dest(const IOM *dst, int out_index, struct io_segment_t *seg, char *buf, size_t *bytes)
 {
     // Set output index
     IO_HANDLE out;
@@ -407,12 +407,12 @@ write_to_dest(const IOM *dst, int out_index, struct io_segment_t *seg, char *buf
     }
 
     // Write to dest 
-    uint64_t remaining = *bytes;
-    uint64_t wr_bytes = 0;
+    size_t remaining = *bytes;
+    size_t wr_bytes = 0;
     char *ptr = buf;
 
     while (remaining) {
-        uint64_t _bytes = remaining;
+        size_t _bytes = remaining;
         enum io_status status = dst->write(out, ptr, &_bytes);
         switch (status) {
         case IO_SUCCESS:
@@ -461,7 +461,7 @@ generic_stream_segment(void *arg)
     const IOM *dst = get_machine_ref(seg->out);
     const IOM *dst1 = get_machine_ref(seg->out1);
 
-    uint64_t buflen = (src->buf_read_size_rec > dst->buf_write_size_rec) ?
+    size_t buflen = (src->buf_read_size_rec > dst->buf_write_size_rec) ?
         src->buf_read_size_rec : dst->buf_write_size_rec;
 
     if (dst1) {
@@ -499,7 +499,7 @@ generic_stream_segment(void *arg)
     seg->running = 1;
     while (seg->running) {
         enum iostream_seg_ctrl_e ctrl;
-        uint64_t bytes = 0;
+        size_t bytes = 0;
 
         /* State Machine */
         switch (*seg->state) {
@@ -524,7 +524,7 @@ generic_stream_segment(void *arg)
         }
         seg->no_data = 0;
 
-        uint64_t src_bytes = bytes;
+        size_t src_bytes = bytes;
         if (SEG_CTRL_TOP == write_to_dest(dst, 0, seg, buf, &bytes)) {
             continue;
         }
