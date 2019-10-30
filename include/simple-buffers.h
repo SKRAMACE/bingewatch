@@ -1,6 +1,11 @@
 #ifndef __BINGEWATCH_BUFFERS_H__
 #define __BINGEWATCH_BUFFERS_H__
 
+// TODO: Write generic functions which look up the buffer type and return
+//  size_t bw_get_buf_size(IO_HANDLE h);
+
+#define BF_BLOCKFILL 0x1
+
 // Continuous Variable-Size Buffer
 struct rbiom_args {
     uint64_t buf_bytes;
@@ -13,6 +18,20 @@ uint64_t rb_get_size(IO_HANDLE h);
 uint64_t rb_get_bytes(IO_HANDLE h);
 void rbiom_update_defaults(struct rbiom_args *rb);
 const IOM *new_rb_machine(IO_HANDLE *h, uint64_t buffer_size, uint64_t block_size);
+
+// Fixed-size Block Buffer
+struct fbbiom_args {
+    uint64_t buf_bytes;
+    uint64_t block_bytes;
+    uint16_t align;
+    uint32_t flags;
+};
+
+const IOM *get_fbb_machine();
+uint64_t fbb_get_size(IO_HANDLE h);
+uint64_t fbb_get_bytes(IO_HANDLE h);
+//const IOM *new_fbb_machine_fill(IO_HANDLE *h, uint64_t buffer_size, uint64_t block_size);
+const IOM *new_fbb_machine(IO_HANDLE *h, uint64_t buffer_size, uint64_t block_size);
 
 // Sync Buffer
 // Continuous Variable-Size Buffer
