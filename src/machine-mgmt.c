@@ -60,17 +60,25 @@ get_machine(const char *name)
     return NULL;
 }
 
-const IOM *
-get_machine_ref(IO_HANDLE handle)
+static IOM *
+get_machine_by_handle(IO_HANDLE handle)
 {
     int i;
     for (i = 0; i < handle_count; i++) {
         struct handle_map_t *hm = handle_map + i;
         if (hm->handle == handle) {
-            return (const IOM*)hm->machine;
+            return hm->machine;
         }
     }
     return NULL;
+}
+
+
+const IOM *
+get_machine_ref(IO_HANDLE handle)
+{
+    IOM *m = get_machine_by_handle(handle);
+    return (const IOM*)m;
 }
 
 IOM *
@@ -109,7 +117,8 @@ machine_register(const char *name)
     machine->get_read_desc  = machine_get_read_desc;
     machine->get_write_desc = machine_get_write_desc;
 
-    machine->buf_size_rec = 0;
+    machine->buf_read_size_rec = 0;
+    machine->buf_write_size_rec = 0;
 
     // Track new machine 
     machine_count++;
@@ -139,6 +148,28 @@ request_handle(IOM *machine)
     m->machine = machine;
 
     return m->handle;
+}
+
+void
+machine_set_write_size(IO_HANDLE h, uint32_t len)
+{
+    IOM *d = get_machine_by_handle(h);
+    if (!d) {
+        return;
+    }
+
+    d->buf_write_size_rec = len;
+}
+
+void
+machine_set_read_size(IO_HANDLE h, uint32_t len)
+{
+    IOM *d = get_machine_by_handle(h);
+    if (!d) {
+        return;
+    }
+
+    d->buf_read_size_rec = len;
 }
 
 void

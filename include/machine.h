@@ -52,7 +52,8 @@ typedef struct bw_machine {
     void *alloc;
 
     // Buffer size recommendation: Used by implementor for optimal buffer allocation
-    uint64_t buf_size_rec;
+    uint64_t buf_read_size_rec;
+    uint64_t buf_write_size_rec;
 
     // Timeout metric
     uint64_t timeout;
@@ -113,6 +114,8 @@ IOM *get_machine(const char *name);
 int machine_desc_init(POOL *p, IOM *machine, IO_DESC *b);
 const IOM *get_machine_ref(IO_HANDLE handle);
 IO_HANDLE request_handle(IOM *machine);
+void machine_set_read_size(IO_HANDLE h, uint32_t len);
+void machine_set_write_size(IO_HANDLE h, uint32_t len);
 void machine_cleanup();
 
 #endif

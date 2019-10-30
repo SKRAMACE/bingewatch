@@ -98,7 +98,7 @@ dump_to_binfile(IO_FILTER_ARGS)
     static __thread FILE *outfile = NULL; 
     if (!outfile) {
         char filename[64];
-        snprintf(filename, 64, "test_data_%s", stream_name);
+        snprintf(filename, 64, "test_data_%s", seg_name);
         outfile = fopen(filename, "wb");
     }
     uint64_t bytes_written = fwrite(IO_FILTER_ARGS_BUF, sizeof(uint8_t), *IO_FILTER_ARGS_BYTES, outfile);

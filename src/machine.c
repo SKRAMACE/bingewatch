@@ -271,5 +271,3 @@ machine_desc_init(POOL *p, IOM *machine, IO_DESC *d)
 
     return IO_SUCCESS;
 }
-
-

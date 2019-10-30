@@ -103,7 +103,7 @@ struct io_segment_t {
 };
 
 // Externed in stream.h
-__thread char stream_name[STREAM_NAME_LEN] = {0};
+__thread char seg_name[SEG_NAME_LEN] = {0};
 
 static void
 set_state(struct io_stream_t *stream, enum sq_state_e new_state)
@@ -461,9 +461,11 @@ generic_stream_segment(void *arg)
     const IOM *dst = get_machine_ref(seg->out);
     const IOM *dst1 = get_machine_ref(seg->out1);
 
-    uint64_t buflen = (src->buf_size_rec > dst->buf_size_rec) ? src->buf_size_rec : dst->buf_size_rec;
+    uint64_t buflen = (src->buf_read_size_rec > dst->buf_write_size_rec) ?
+        src->buf_read_size_rec : dst->buf_write_size_rec;
+
     if (dst1) {
-        buflen = (dst1->buf_size_rec > buflen) ? dst1->buf_size_rec : buflen;
+        buflen = (dst1->buf_write_size_rec > buflen) ? dst1->buf_write_size_rec : buflen;
     }
 
     if (0 == buflen) {
@@ -483,9 +485,16 @@ generic_stream_segment(void *arg)
     gettimeofday(&seg->out_stats.t0, NULL);
     pthread_mutex_unlock(seg->lock);
 
-    snprintf(stream_name, STREAM_NAME_LEN, "%s_%s", src->name, dst->name);
-    stream_name[STREAM_NAME_LEN - 1] = '\0';
-    printf("Starting Segment %s\n", stream_name);
+    if (dst1) {
+        snprintf(seg_name, SEG_NAME_LEN, "%s -> %s & %s (%d)",
+            src->name, dst->name, dst1->name, (uint32_t)buflen);
+    } else {
+        snprintf(seg_name, SEG_NAME_LEN, "%s -> %s (%d)",
+            src->name, dst->name, (uint32_t)buflen);
+    }
+
+    seg_name[SEG_NAME_LEN - 1] = '\0';
+    printf("Starting Segment %s\n", seg_name);
 
     seg->running = 1;
     while (seg->running) {
@@ -586,7 +595,7 @@ io_stream_add_segment_internal(struct io_stream_t *st, IO_HANDLE in, IO_HANDLE o
 }
 
 IO_SEGMENT
-io_stream_add_segment(IO_STREAM h, IO_HANDLE in, IO_HANDLE out)
+io_stream_add_segment(IO_STREAM h, IO_HANDLE in, IO_HANDLE out, int flag)
 {
     // Get stream from handle
     struct io_stream_t *st = get_stream(h);
@@ -595,17 +604,21 @@ io_stream_add_segment(IO_STREAM h, IO_HANDLE in, IO_HANDLE out)
         return 0;
     }
 
-    // Init Asynchronous Buffer IO Machine
-    const IOM *rb = get_rb_machine();
-    struct rbiom_args rb_vars = {0, 0, 0};
-    IO_HANDLE buf = rb->create(&rb_vars);
+    if (flag & BW_BUFFERED) {
+        // Init Asynchronous Buffer IO Machine
+        const IOM *rb = get_rb_machine();
+        struct rbiom_args rb_vars = {0, 0, 0};
+        IO_HANDLE buf = rb->create(&rb_vars);
 
-    io_stream_add_segment_internal(st, buf, out, 0);
-    io_stream_add_segment_internal(st, in, buf, 0);
+        io_stream_add_segment_internal(st, buf, out, 0);
+        io_stream_add_segment_internal(st, in, buf, 0);
+    } else {
+        io_stream_add_segment_internal(st, in, out, 0);
+    }
 }
 
 IO_SEGMENT
-io_stream_add_tee_segment(IO_STREAM h, IO_HANDLE in, IO_HANDLE out0, IO_HANDLE out1)
+io_stream_add_tee_segment(IO_STREAM h, IO_HANDLE in, IO_HANDLE out, IO_HANDLE out1, int flag)
 {
     // Get stream from handle
     struct io_stream_t *st = get_stream(h);
@@ -614,15 +627,19 @@ io_stream_add_tee_segment(IO_STREAM h, IO_HANDLE in, IO_HANDLE out0, IO_HANDLE o
         return 0;
     }
 
-    // Init Asynchronous Buffer IO Machine
-    const IOM *rb = get_rb_machine();
-    struct rbiom_args rb_vars = {0, 0, 0};
-    IO_HANDLE buf0 = rb->create(&rb_vars);
-    IO_HANDLE buf1 = rb->create(&rb_vars);
+    if (flag & BW_BUFFERED) {
+        // Init Asynchronous Buffer IO Machine
+        const IOM *rb = get_rb_machine();
+        struct rbiom_args rb_vars = {0, 0, 0};
+        IO_HANDLE buf0 = rb->create(&rb_vars);
+        IO_HANDLE buf1 = rb->create(&rb_vars);
 
-    io_stream_add_segment_internal(st, buf0, out0, 0);
-    io_stream_add_segment_internal(st, buf1, out1, 0);
-    io_stream_add_segment_internal(st, in, buf0, buf1);
+        io_stream_add_segment_internal(st, buf0, out, 0);
+        io_stream_add_segment_internal(st, buf1, out1, 0);
+        io_stream_add_segment_internal(st, in, buf0, buf1);
+    } else {
+        io_stream_add_segment_internal(st, in, out, out1);
+    }
 }
 
 void
