@@ -51,10 +51,14 @@ buf_read(IO_FILTER_ARGS)
     pthread_mutex_lock(&ring->rlock);
     struct __block_t *b = ring->rp;
 
+    if (b->bytes == 0) {
+        pthread_mutex_unlock(&ring->rlock);
+        *IO_FILTER_ARGS_BYTES = 0;
+        return IO_SUCCESS;
+    }
+
     // Initialize read vars
     pthread_mutex_t *lock = &ring->_b.lock;
-    size_t bytes_read = 0;
-
     size_t bytes = b->bytes;
 
     // Align bytes
@@ -140,10 +144,11 @@ buf_write(IO_FILTER_ARGS)
         // Link tail of new block segment into ring
         add->next = next;
     }
-    pthread_mutex_unlock(lock);
 
     ring->bytes += bytes;
     ring->wp = b->next;
+    pthread_mutex_unlock(lock);
+
 
     // Unlock writing to this buffer
     pthread_mutex_unlock(&ring->wlock);
