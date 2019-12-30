@@ -101,6 +101,9 @@ file_write(IO_FILTER_ARGS)
         return IO_ERROR;
     }
 
+    if (*IO_FILTER_ARGS_BYTES == 0) {
+        return IO_SUCCESS;
+    }
     pthread_mutex_t *lock = &fd->_d.lock;
 
     pthread_mutex_lock(lock);
@@ -150,6 +153,7 @@ file_write(IO_FILTER_ARGS)
         ptr += b;
         total += b;
     }
+    fflush(fd->f);
     pthread_mutex_unlock(lock);
 
     *IO_FILTER_ARGS_BYTES = total;
