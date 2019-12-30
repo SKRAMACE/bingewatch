@@ -9,6 +9,8 @@
 struct fb_ctl_t {
     char *filter_buf;
     size_t bytes;
+    io_filter_reset_fn reset_fn;
+    void *reset_arg;
 };
 
 struct io_filter_t *
@@ -224,6 +226,12 @@ feedback_controller_fn(IO_FILTER_ARGS)
         ret = CALL_NEXT_FILTER_BUF(fb->filter_buf, IO_FILTER_ARGS_BYTES);
     } while (ret == IO_CONTINUE);
 
+    fb->reset_fn(fb->reset_arg);
+
+    if (ret == IO_BREAK) {
+        ret = IO_SUCCESS;
+    }
+
     return ret;
 }
 
@@ -236,6 +244,8 @@ add_feedback_controller(void *alloc, struct io_filter_t *head, struct io_filter_
     struct fb_ctl_t *ctl = (struct fb_ctl_t *)palloc(alloc, sizeof(struct fb_ctl_t));
     ctl->filter_buf = NULL;
     ctl->bytes = 0;
+    ctl->reset_fn = metric->reset;
+    ctl->reset_arg = metric->obj;
     fc->obj = ctl;
 
     // Create metric filter

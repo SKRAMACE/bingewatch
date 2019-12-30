@@ -20,6 +20,7 @@ enum io_filter_direction {
 
 struct io_filter_t;
 typedef int (*io_filter_fn)(struct io_filter_t*, void*, size_t*, io_block_e, int);
+typedef int (*io_filter_reset_fn)(void *);
 
 typedef struct io_filter_t {
     char enabled;
@@ -32,6 +33,7 @@ typedef struct io_filter_t {
 
     struct io_filter_t *next;
     io_filter_fn call;
+    io_filter_reset_fn reset;
 } IO_FILTER;
 
 #define IO_DEFAULT_ALIGN sizeof(char) 

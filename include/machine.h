@@ -23,6 +23,7 @@ enum io_status {
     IO_ERROR,               // Generic error
     IO_COMPLETE,            // Treated like a success, but triggers a "stop"
     IO_CONTINUE,            // Used to commuincate iterations
+    IO_BREAK,               // Used to break an iteration
     IO_IMPLEMENTATION=100,
 };
 
