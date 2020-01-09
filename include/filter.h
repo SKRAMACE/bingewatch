@@ -82,5 +82,7 @@ void add_read_filter(int h, struct io_filter_t *addme);
 void add_feedback_write_filter(IO_HANDLE h, struct io_filter_t *addme, struct io_filter_t *feedback, struct io_filter_t *feedback_metric);
 struct io_filter_t *filter_read_init(POOL *p, const char *name, io_filter_fn fn, IO_DESC *d);
 struct io_filter_t *filter_write_init(POOL *p, const char *name, io_filter_fn fn, IO_DESC *d);
+struct io_filter_t *filter_get_write_filter(IO_HANDLE h, char *name);
+struct io_filter_t *filter_get_read_filter(IO_HANDLE h, char *name);
 
 #endif

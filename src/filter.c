@@ -341,3 +341,35 @@ filter_write_init(POOL *p, const char *name, io_filter_fn fn, IO_DESC *d)
     d->io_write->obj = filter;
     return filter;
 }
+
+struct io_filter_t *
+filter_get_read_filter(IO_HANDLE h, char *name)
+{
+    // Get read filter from IOM read descriptor
+    const IOM *machine = get_machine_ref(h);
+    struct io_desc *io = machine->get_read_desc(h);
+    struct io_filter_t *f = (struct io_filter_t *)io->obj;
+    while (f) {
+        if (strncmp(f->name, name, IO_MAX_NAME_LEN) == 0) {
+            return f;
+        }
+        f = f->next;
+    }
+    return NULL;
+}
+
+struct io_filter_t *
+filter_get_write_filter(IO_HANDLE h, char *name)
+{
+    // Get write filter from IOM write descriptor
+    const IOM *machine = get_machine_ref(h);
+    struct io_desc *io = machine->get_write_desc(h);
+    struct io_filter_t *f = (struct io_filter_t *)io->obj;
+    while (f) {
+        if (strncmp(f->name, name, IO_MAX_NAME_LEN) == 0) {
+            return f;
+        }
+        f = f->next;
+    }
+    return NULL;
+}
