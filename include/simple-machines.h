@@ -59,4 +59,8 @@ const IOM *get_file_machine();
 IO_HANDLE new_file_machine(char *fname, char *outdir, enum filetype_e type);
 IO_HANDLE new_rotating_file_machine(char *fname, char *outdir, enum filetype_e type);
 
+
+/***** NULL MACHINE *****/
+IO_HANDLE new_null_machine();
+
 #endif
