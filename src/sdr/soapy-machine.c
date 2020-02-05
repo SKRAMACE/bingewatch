@@ -143,6 +143,7 @@ read_data_from_hw(IO_FILTER_ARGS)
     int samples_read;
     samples_read = SoapySDRDevice_readStream(chan->sdr, chan->rx, buffs, bytes, &flags, &timeNs, 100000);
     if (samples_read < 0) {
+        printf("readStream fail: %s\n", SoapySDRDevice_lastError());
         *IO_FILTER_ARGS_BYTES = 0;
         return IO_ERROR;
     }
