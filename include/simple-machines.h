@@ -1,6 +1,16 @@
 #ifndef __BINGEWATCH_MACHINES_H__
 #define __BINGEWATCH_MACHINES_H__
 
+#ifdef BINGEWATCH_LOCAL
+#include "machine.h"
+#include "filter.h"
+#include "file-machine.h"
+#else
+#include <bingewatch/machine.h>
+#include <bingewatch/filter.h>
+#include <bingewatch/file-machine.h>
+#endif
+
 #include <radpool.h>
 
 /***** SOCKET MACHINE *****/
@@ -36,29 +46,16 @@ struct sockiom_args {
 const IOM *get_sock_machine();
 void sockiom_update_defaults(struct sockiom_args *s);
 
-
 /***** FILE MACHINE *****/
-#define NO_OUTDIR NULL
+IO_HANDLE new_file_write_machine(char *rootdir, char *fname, char *ext);
+IO_HANDLE new_file_read_machine(char *fname);
 
-enum filetype_e
-{
-    FILETYPE_TEXT=0,
-    FILETYPE_BINARY,
-};
-
-// ARG STRUCTS
-struct fileiom_args {
-    char *fname;
-    char *outdir;
-    char is_binary;
-    char is_rotate;
-};
-
-const IOM *get_file_machine();
-
-IO_HANDLE new_file_machine(char *fname, char *outdir, enum filetype_e type);
-IO_HANDLE new_rotating_file_machine(char *fname, char *outdir, enum filetype_e type);
-
+void file_iom_set_auto_rotate(IO_HANDLE h);
+void file_iom_set_rotate(IO_HANDLE h);
+void file_iom_set_auto_date(IO_HANDLE h);
+void file_iom_set_auto_date_fmt(IO_HANDLE h, const char *fmt);
+IO_FILTER *file_rotate_filter(IO_HANDLE h);
+IO_FILTER *file_dir_rotate_filter(IO_HANDLE h, const char *basedir);
 
 /***** NULL MACHINE *****/
 IO_HANDLE new_null_machine();
