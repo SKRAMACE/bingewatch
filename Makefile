@@ -33,12 +33,17 @@ LCFLAGS += -ggdb
 CFLAGS += -ggdb
 endif
 
+TEST_CFLAGS=\
+    -ggdb \
+    -DBINGEWATCH_LOCAL \
+
 .IGNORE: clean
 .PHONY: install clean uninstall
 
 TESTLIBS = \
     -lradpool \
     -lpthread \
+    -luuid \
 
 BUF = \
 	block-list-buf.c \
@@ -74,8 +79,13 @@ $(LIB): $(SRC)
 %.o: %.c
 	$(CC) $(INC) -I/usc/local/include -Werror -ggdb -c $^
 
-tests: machine.c machine-mgmt.c filter.c $(BUF)
-	$(CC) test/simple-buffer-test.c $^ $(INC) -o test/bin/simple-buffer-test $(TESTLIBS)
+buffer-test: machine.c machine-mgmt.c filter.c $(BUF)
+	$(CC) $(TEST_CFLAGS) test/simple-buffer-test.c $^ $(INC) -o test/bin/simple-buffer-test $(TESTLIBS)
+
+file-test: machine.c machine-mgmt.c filter.c file-machine.c null-machine.c
+	$(CC) $(TEST_CFLAGS) test/file-test.c $^ $(INC) -o test/bin/file-test $(TESTLIBS)
+
+tests: buffer-test file-test
 
 install: $(LIB)
 	install -m 0755 $(LIB) -D $(DESTDIR)$(libdir)/$(LIBFILE)
