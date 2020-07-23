@@ -28,6 +28,8 @@ VPATH = $(SRC_DIR):$(SRC_DIR)/buf:$(SRC_DIR)/networking:$(SRC_DIR)/sdr:$(SRC_DIR
 LCFLAGS += -Werror -fPIC -shared
 LDFLAGS += -Wl,-soname,$(LIBFILE)
 
+CFLAGS += -DBINGEWATCH_LOCAL
+
 ifeq ($(debug),on)
 LCFLAGS += -ggdb
 CFLAGS += -ggdb
@@ -74,10 +76,10 @@ SRC = \
 	$(FILTERS) \
 
 $(LIB): $(SRC)
-	$(CC) $^ $(INC) $(LDFLAGS) $(LCFLAGS) -o $@
+	$(CC) $(CFLAGS) $^ $(INC) $(LDFLAGS) $(LCFLAGS) -o $@
 
 %.o: %.c
-	$(CC) $(INC) -I/usc/local/include -Werror -ggdb -c $^
+	$(CC) $(CFLAGS) $(INC) -I/usc/local/include -Werror -ggdb -c $^
 
 buffer-test: machine.c machine-mgmt.c filter.c $(BUF)
 	$(CC) $(TEST_CFLAGS) test/simple-buffer-test.c $^ $(INC) -o test/bin/simple-buffer-test $(TESTLIBS)
