@@ -318,13 +318,6 @@ do_return:
 static int
 run_auto_date_test(void *data, size_t bytes)
 {
-    // Set format to year/month
-    // Write 3 files
-    // verify indexing
-
-    // set format to year/month/day
-    // verify indexing
-
     int ret = 1;
     printf("%s\n", __FUNCTION__);
 
@@ -386,6 +379,48 @@ do_return:
 }
 
 int
+run_file_tag_test(void *data, size_t bytes)
+{
+    int ret = 1;
+    printf("%s\n", __FUNCTION__);
+
+    char *tags[2] = {"file-tag-a", "file-tag-b"};
+
+    IO_HANDLE h = new_file_write_machine(rootdir, tags[0], "float");
+    file_iom_set_auto_rotate(h);
+
+    struct stat s;
+    char fname[1024];
+    int i = 0;
+    while (1) {
+        int j = 0;
+        for (; j < 3; j++) {
+            size_t b = bytes;
+            m->write(h, data, &b);
+            snprintf(fname, 1024, "%s/%s-%05d.float",
+                rootdir, tags[i], j);
+
+            if (stat(fname, &s) != 0) {
+                printf("\tFAIL: %s not created\n", fname);
+                goto do_return;
+            }
+        }
+
+        if (i == 0) {
+            file_iom_set_filetag(h, tags[++i]);
+            continue;
+        }
+
+        break;
+    }
+    ret = 0;
+    printf("\tPASS\n");
+
+do_return:
+    return ret;
+}
+
+int
 main(int nargs, char *argv[])
 {
     fmt_rootdir("/tmp");
@@ -400,6 +435,7 @@ main(int nargs, char *argv[])
     run_rotate_test(data, bytes);
     run_dir_rotate_test(data, bytes);
     run_auto_date_test(data, bytes);
+    run_file_tag_test(data, bytes);
 
     if (data) {
         free(data);

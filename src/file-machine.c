@@ -15,7 +15,8 @@
 #include "simple-machines.h"
 #include "filter.h"
 
-#define MAX_FILEPATH_LEN 2048
+#define FILE_IOM_MAX_STRLEN 1024
+#define FILE_IOM_MAX_PATHLEN 2048
 #define TIMESTAMP_FMT "%Y/%m/%d/%H"
 
 static IOM *file_machine = NULL;
@@ -46,8 +47,22 @@ struct file_desc_t {
 };
 
 static inline void
-sanitize_args(struct fileiom_args *args)
+set_input_str(POOL *p, char *src, char **dst)
 {
+    size_t len = strlen(src) + 1;
+    len = (len > FILE_IOM_MAX_STRLEN) ? FILE_IOM_MAX_STRLEN : len;
+
+    char *str = *dst;
+
+    if (!str) {
+        str = pcalloc(p, len);
+
+    } else if (len > strlen(str)) {
+        str = repalloc(str, len, p);
+    }
+
+    snprintf(str, len, "%s", src);
+    *dst = str;
 }
 
 static void
@@ -159,10 +174,10 @@ open_file(struct file_desc_t *fd, uint32_t rw)
         return 0;
     }
 
-    char dirname[MAX_FILEPATH_LEN];
+    char dirname[FILE_IOM_MAX_PATHLEN];
     int off = 0;
 
-    int x = snprintf(dirname + off, MAX_FILEPATH_LEN - off, "%s", fd->root_dir);
+    int x = snprintf(dirname + off, FILE_IOM_MAX_PATHLEN - off, "%s", fd->root_dir);
     off += x;
 
     if (fd->flags & FFILE_AUTO_DATE) {
@@ -175,16 +190,16 @@ open_file(struct file_desc_t *fd, uint32_t rw)
             fd->file_index = 0;
         }
 
-        x = snprintf(dirname + off, MAX_FILEPATH_LEN - off, "/%s", timestamp);
+        x = snprintf(dirname + off, FILE_IOM_MAX_PATHLEN - off, "/%s", timestamp);
         off += x;
     }
 
     if (fd->flags & FFILE_DIR_ROTATE) {
         if (fd->base_dir) {
-            x = snprintf(dirname + off, MAX_FILEPATH_LEN - off, "/%s-%05d",
+            x = snprintf(dirname + off, FILE_IOM_MAX_PATHLEN - off, "/%s-%05d",
                 fd->base_dir, fd->basedir_index);
         } else {
-            x = snprintf(dirname + off, MAX_FILEPATH_LEN - off, "/%05d", fd->basedir_index);
+            x = snprintf(dirname + off, FILE_IOM_MAX_PATHLEN - off, "/%05d", fd->basedir_index);
         }
         off += x;
     }
@@ -193,7 +208,7 @@ open_file(struct file_desc_t *fd, uint32_t rw)
         return 1;
     }
 
-    char fname[MAX_FILEPATH_LEN];
+    char fname[FILE_IOM_MAX_PATHLEN];
 
     if (FFILE_WRITE == rw) {
         if (fd->fr) {
@@ -201,11 +216,11 @@ open_file(struct file_desc_t *fd, uint32_t rw)
         }
 
         if (fd->flags & FFILE_ROTATE) {
-            snprintf(fname, MAX_FILEPATH_LEN, "%s/%s-%05d%s%s",
+            snprintf(fname, FILE_IOM_MAX_PATHLEN, "%s/%s-%05d%s%s",
                 dirname, fd->file_tag, fd->file_index, 
                 (fd->file_ext) ? "." : "", (fd->file_ext) ? fd->file_ext : "");
         } else {
-            snprintf(fname, MAX_FILEPATH_LEN, "%s/%s%s%s",
+            snprintf(fname, FILE_IOM_MAX_PATHLEN, "%s/%s%s%s",
                 dirname, fd->file_tag,
                 (fd->file_ext) ? "." : "", (fd->file_ext) ? fd->file_ext : "");
         }
@@ -217,7 +232,7 @@ open_file(struct file_desc_t *fd, uint32_t rw)
             fclose(fd->fw);
         }
 
-        snprintf(fname, MAX_FILEPATH_LEN, "%s/%s%s%s",
+        snprintf(fname, FILE_IOM_MAX_PATHLEN, "%s/%s%s%s",
             dirname, fd->file_tag,
             (fd->file_ext) ? "." : "", (fd->file_ext) ? fd->file_ext : "");
         f = fd->fr = fopen(fname, "r");
@@ -353,7 +368,6 @@ static IO_HANDLE
 create_file(void *arg)
 {
     struct fileiom_args *args = (struct fileiom_args *)arg;
-    sanitize_args(args);
 
     POOL *p = create_subpool(file_machine->alloc);
     if (!p) {
@@ -373,28 +387,18 @@ create_file(void *arg)
     pthread_mutex_init(&d->lock, NULL);
     d->pool = p;
 
-    // Validate directory len
-    size_t len = strlen(args->fname);
-    desc->file_tag = pcalloc(p, len + 1);
-    snprintf(desc->file_tag, len, "%s", args->fname);
-    strncpy(desc->file_tag, args->fname, len);
+    set_input_str(p, args->fname, &desc->file_tag);
 
     if (args->root_dir) {
-        size_t len = strlen(args->root_dir);
-        desc->root_dir = pcalloc(p, len + 1);
-        strncpy(desc->root_dir, args->root_dir, len);
+        set_input_str(p, args->root_dir, &desc->root_dir);
     }
 
     if (args->base_dir) {
-        size_t len = strlen(args->base_dir);
-        desc->base_dir = pcalloc(p, len + 1);
-        strncpy(desc->base_dir, args->base_dir, len);
+        set_input_str(p, args->base_dir, &desc->base_dir);
     }
 
     if (args->ext) {
-        size_t len = strlen(args->ext);
-        desc->file_ext = pcalloc(p, len + 1);
-        strncpy(desc->file_ext, args->ext, len);
+        set_input_str(p, args->ext, &desc->file_ext);
     }
 
     desc->basedir_index = 0;
@@ -537,6 +541,23 @@ file_iom_set_auto_date_fmt(IO_HANDLE h, const char *fmt)
     fd->date_fmt = fmt;
 }
 
+void
+file_iom_set_filetag(IO_HANDLE h, char *file_tag)
+{
+    struct file_desc_t *fd = (struct file_desc_t *)machine_get_desc(h);
+    if (!fd) {
+        return;
+    }
+
+    pthread_mutex_t *lock = &fd->_d.lock;
+    pthread_mutex_lock(lock);
+
+    set_input_str(fd->_d.pool, file_tag, &fd->file_tag);
+    fd->file_index = 0;
+
+    pthread_mutex_unlock(lock);
+}
+
 IO_HANDLE
 new_file_machine(char *rootdir, char *fname, char *ext, uint32_t flags)
 {
@@ -555,19 +576,19 @@ new_file_machine(char *rootdir, char *fname, char *ext, uint32_t flags)
 IO_HANDLE
 new_file_read_machine(char *fname)
 {
-    char dirstr[MAX_FILEPATH_LEN];
-    int len = snprintf(dirstr, MAX_FILEPATH_LEN, "%s", fname);
+    char dirstr[FILE_IOM_MAX_PATHLEN];
+    int len = snprintf(dirstr, FILE_IOM_MAX_PATHLEN, "%s", fname);
     if (len < 0) {
         printf("Error formatting filename: %s\n", strerror(errno));
         return 0;
     }
 
-    if (len > MAX_FILEPATH_LEN) {
-        printf("Filename exceeded max length (%d > %d)\n", len, MAX_FILEPATH_LEN);
+    if (len > FILE_IOM_MAX_PATHLEN) {
+        printf("Filename exceeded max length (%d > %d)\n", len, FILE_IOM_MAX_PATHLEN);
         return 0;
     }
 
-    char basestr[MAX_FILEPATH_LEN];
+    char basestr[FILE_IOM_MAX_PATHLEN];
     strncpy(basestr, dirstr, len+1);
 
     char *root = dirname(dirstr);

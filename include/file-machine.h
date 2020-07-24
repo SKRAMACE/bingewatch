@@ -29,5 +29,6 @@ const IOM *get_file_machine();
 
 IO_HANDLE new_file_machine(char *rootdir, char *fname, char *ext, uint32_t flags);
 void file_iom_set_flags(IO_HANDLE h, uint32_t flags);
+void file_iom_set_filetag(IO_HANDLE h, char *file_tag);
 
 #endif
