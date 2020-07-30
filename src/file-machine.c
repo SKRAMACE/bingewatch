@@ -19,7 +19,8 @@
 #define FILE_IOM_MAX_PATHLEN 2048
 #define TIMESTAMP_FMT "%Y/%m/%d/%H"
 
-static IOM *file_machine = NULL;
+const IOM *file_machine;
+static IOM *_file_machine = NULL;
 
 enum file_rotate_e {
     F_NOROTATE=0,
@@ -131,14 +132,17 @@ create_dir(char *dirname)
 }
 
 static void
-rotate_file(struct file_desc_t *fd)
+rotate_wfile(struct file_desc_t *fd)
 {
+    // Close write file
     if (fd->fw) {
         fclose(fd->fw);
         fd->fw = NULL;
     }
 
-    fd->file_index++;
+    if (fd->flags & FFILE_INDEX) {
+        fd->file_index++;
+    }
 }
 
 static void
@@ -153,9 +157,50 @@ rotate_basedir(struct file_desc_t *fd)
     fd->basedir_index++;
 }
 
+static void
+build_directory_path(struct file_desc_t *fd, char *path, size_t *bytes)
+{
+    char *p = path;
+    size_t r = *bytes;
+
+    // Start with root dir
+    int x = snprintf(p, r, "%s", fd->root_dir);
+    p += x;
+    r -= x;
+
+    if (fd->flags & FFILE_AUTO_DATE) {
+        char timestamp[32];
+        gen_timestamp(timestamp, 32, fd->date_fmt);
+
+        if (strncmp(timestamp, fd->timestamp, 32) != 0) {
+            strncpy(fd->timestamp, timestamp, 32);
+            fd->basedir_index = 0;
+            fd->file_index = 0;
+        }
+
+        x = snprintf(p, r, "/%s", timestamp);
+        p += x;
+        r -= x;
+    }
+
+    if (fd->flags & FFILE_DIR_ROTATE) {
+        if (fd->base_dir) {
+            x = snprintf(p, r, "/%s-%05d",
+                fd->base_dir, fd->basedir_index);
+        } else {
+            x = snprintf(p, r, "/%05d", fd->basedir_index);
+        }
+        p += x;
+        r -= x;
+    }
+
+    *bytes = (size_t)(p - path);
+}
+
 static int
 open_file(struct file_desc_t *fd, uint32_t rw)
 {
+    // Select file descriptor
     FILE *f = NULL;
     switch (rw) {
     case FFILE_READ:
@@ -168,70 +213,65 @@ open_file(struct file_desc_t *fd, uint32_t rw)
         return 1;
     }
 
+    // If file is already open, return success
     if (f) {
         return 0;
     }
 
-    char dirname[FILE_IOM_MAX_PATHLEN];
-    int off = 0;
-
-    int x = snprintf(dirname + off, FILE_IOM_MAX_PATHLEN - off, "%s", fd->root_dir);
-    off += x;
-
-    if (fd->flags & FFILE_AUTO_DATE) {
-        char timestamp[32];
-        gen_timestamp(timestamp, 32, fd->date_fmt);
-
-        if (strncmp(timestamp, fd->timestamp, 32) != 0) {
-            strncpy(fd->timestamp, timestamp, 32);
-            fd->basedir_index = 0;
-            fd->file_index = 0;
-        }
-
-        x = snprintf(dirname + off, FILE_IOM_MAX_PATHLEN - off, "/%s", timestamp);
-        off += x;
-    }
-
-    if (fd->flags & FFILE_DIR_ROTATE) {
-        if (fd->base_dir) {
-            x = snprintf(dirname + off, FILE_IOM_MAX_PATHLEN - off, "/%s-%05d",
-                fd->base_dir, fd->basedir_index);
-        } else {
-            x = snprintf(dirname + off, FILE_IOM_MAX_PATHLEN - off, "/%05d", fd->basedir_index);
-        }
-        off += x;
-    }
-
-    if (create_dir(dirname) != 0) {
+    // Try to create directory
+    char path[FILE_IOM_MAX_PATHLEN];
+    size_t len = FILE_IOM_MAX_PATHLEN;
+    build_directory_path(fd, path, &len);
+    if (create_dir(path) != 0) {
+        printf("ERROR: Failed to create directory \"%s\"\n", path);
         return 1;
     }
 
     char fname[FILE_IOM_MAX_PATHLEN];
 
+    // Open write file
     if (FFILE_WRITE == rw) {
+        // Close open read file
         if (fd->fr) {
             fclose(fd->fr);
         }
 
-        if (fd->flags & FFILE_ROTATE) {
+        if (fd->flags & FFILE_INDEX) {
             snprintf(fname, FILE_IOM_MAX_PATHLEN, "%s/%s-%05d%s%s",
-                dirname, fd->file_tag, fd->file_index, 
+                path, fd->file_tag, fd->file_index, 
                 (fd->file_ext) ? "." : "", (fd->file_ext) ? fd->file_ext : "");
         } else {
             snprintf(fname, FILE_IOM_MAX_PATHLEN, "%s/%s%s%s",
-                dirname, fd->file_tag,
+                path, fd->file_tag,
                 (fd->file_ext) ? "." : "", (fd->file_ext) ? fd->file_ext : "");
         }
+
+        struct stat s;
+        if ((fd->flags & FFILE_ROTATE) && stat(fname, &s) == 0) {
+            uint32_t index = 1;
+            while (stat(fname, &s) == 0) {
+                snprintf(fname, FILE_IOM_MAX_PATHLEN, "%s/%s-%05d%s%s",
+                    path, fd->file_tag, index++, 
+                    (fd->file_ext) ? "." : "", (fd->file_ext) ? fd->file_ext : "");
+            }
+
+            if (fd->flags & FFILE_INDEX) {
+                fd->file_index = index;
+            }
+        }
+
         f = fd->fw = fopen(fname, "w");
     }
 
+    // Open read file
     if (FFILE_READ == rw) {
+        // Close open write file
         if (fd->fw) {
             fclose(fd->fw);
         }
 
         snprintf(fname, FILE_IOM_MAX_PATHLEN, "%s/%s%s%s",
-            dirname, fd->file_tag,
+            path, fd->file_tag,
             (fd->file_ext) ? "." : "", (fd->file_ext) ? fd->file_ext : "");
         f = fd->fr = fopen(fname, "r");
     }
@@ -291,9 +331,10 @@ file_write(IO_FILTER_ARGS)
     }
     fflush(fd->fw);
 
-    if (fd->flags & FFILE_AUTO_ROTATE) {
-        rotate_file(fd);
+    if (fd->flags & FFILE_ROTATE) {
+        rotate_wfile(fd);
     }
+
     pthread_mutex_unlock(lock);
 
     *IO_FILTER_ARGS_BYTES = total;
@@ -367,7 +408,7 @@ create_file(void *arg)
 {
     struct fileiom_args *args = (struct fileiom_args *)arg;
 
-    POOL *p = create_subpool(file_machine->alloc);
+    POOL *p = create_subpool(_file_machine->alloc);
     if (!p) {
         printf("ERROR: Failed to create memory pool\n");
         return 0;
@@ -405,7 +446,7 @@ create_file(void *arg)
 
     desc->flags = args->flags;
 
-    if (machine_desc_init(p, file_machine, (IO_DESC *)desc) != IO_SUCCESS) {
+    if (machine_desc_init(p, _file_machine, (IO_DESC *)desc) != IO_SUCCESS) {
         pfree(p);
         return 0;
     }
@@ -454,7 +495,7 @@ file_rotate_fn(IO_FILTER_ARGS)
 
     pthread_mutex_t *lock = &fd->_d.lock;
     pthread_mutex_lock(lock);
-    rotate_file(fd);
+    rotate_wfile(fd);
     pthread_mutex_unlock(lock);
 
     ret = CALL_NEXT_FILTER();
@@ -479,7 +520,7 @@ dir_rotate_fn(IO_FILTER_ARGS)
 const IOM*
 get_file_machine()
 {
-    IOM *machine = file_machine;
+    IOM *machine = _file_machine;
     if (!machine) {
         machine = machine_register("file");
 
@@ -490,6 +531,7 @@ get_file_machine()
         machine->write = machine_desc_write;
         machine->obj = NULL;
 
+        _file_machine = machine;
         file_machine = machine;
     }
     return (const IOM *)machine;
@@ -514,7 +556,7 @@ file_iom_set_auto_rotate(IO_HANDLE h)
         return;
     }
      
-    fd->flags |= (FFILE_ROTATE | FFILE_AUTO_ROTATE);
+    fd->flags |= (FFILE_ROTATE | FFILE_INDEX);
 }
 
 void
@@ -550,8 +592,25 @@ file_iom_set_filetag(IO_HANDLE h, char *file_tag)
     pthread_mutex_t *lock = &fd->_d.lock;
     pthread_mutex_lock(lock);
 
+    rotate_wfile(fd);
     set_input_str(fd->_d.pool, file_tag, &fd->file_tag);
     fd->file_index = 0;
+
+    pthread_mutex_unlock(lock);
+}
+
+void
+file_iom_set_rootdir(IO_HANDLE h, char *root_dir)
+{
+    struct file_desc_t *fd = (struct file_desc_t *)machine_get_desc(h);
+    if (!fd) {
+        return;
+    }
+
+    pthread_mutex_t *lock = &fd->_d.lock;
+    pthread_mutex_lock(lock);
+
+    set_input_str(fd->_d.pool, root_dir, &fd->root_dir);
 
     pthread_mutex_unlock(lock);
 }
@@ -567,8 +626,8 @@ new_file_machine(char *rootdir, char *fname, char *ext, uint32_t flags)
     args.ext = ext;
     args.flags = flags;
 
-    const IOM *file_machine = get_file_machine();
-    return file_machine->create(&args);
+    const IOM *fm = get_file_machine();
+    return fm->create(&args);
 }
 
 IO_HANDLE
@@ -616,13 +675,13 @@ file_rotate_filter(IO_HANDLE h)
         return NULL;
     }
 
-    POOL *p = create_subpool(file_machine->alloc);
+    POOL *p = create_subpool(_file_machine->alloc);
 
     char name[64];
     snprintf(name, 64, "file-machine-%d rotate filter", h);
     IO_FILTER *f = create_filter(p, name, file_rotate_fn);
 
-    fd->flags |= FFILE_ROTATE;
+    fd->flags |= FFILE_INDEX;
     fd->file_index = 0;
 
     f->obj = fd;
@@ -638,7 +697,7 @@ file_dir_rotate_filter(IO_HANDLE h, const char *basedir)
         return NULL;
     }
 
-    POOL *p = create_subpool(file_machine->alloc);
+    POOL *p = create_subpool(_file_machine->alloc);
 
     char name[64];
     snprintf(name, 64, "file-machine-%d dir rotate filter", h);
