@@ -8,8 +8,6 @@
 
 #include "simple-machines.h"
 
-const IOM *m = NULL;
-
 static char *rootdir = NULL;
 
 static void
@@ -76,7 +74,7 @@ run_rw_test(void *data, size_t bytes)
     IO_HANDLE h = new_file_machine(rootdir, "data", "float", FFILE_RW);
 
     size_t b = bytes;
-    m->write(h, data, &b);
+    file_machine->write(h, data, &b);
 
     if (b != bytes) {
         printf("\tFAIL: Write byte mismatch\n");
@@ -85,7 +83,7 @@ run_rw_test(void *data, size_t bytes)
 
     rdata = malloc(bytes);
     b = bytes;
-    m->read(h, rdata, &b);
+    file_machine->read(h, rdata, &b);
 
     if (b != bytes) {
         printf("\tFAIL: Read byte mismatch\n");
@@ -116,7 +114,7 @@ run_read_test(void *data, size_t bytes)
 
     char *rdata = NULL;
     char fname[1024];
-    snprintf(fname, 1024, "%s/data-read-test", rootdir);
+    snprintf(fname, 1024, "%s/data-read-test.float", rootdir);
     FILE *f = fopen(fname, "w");
     fwrite(data, 1, bytes, f);
     fclose(f);
@@ -125,7 +123,7 @@ run_read_test(void *data, size_t bytes)
 
     rdata = malloc(bytes);
     size_t b = bytes;
-    m->read(h, rdata, &b);
+    file_machine->read(h, rdata, &b);
 
     if (b != bytes) {
         printf("\tFAIL: Read byte mismatch\n");
@@ -160,7 +158,7 @@ run_write_test(void *data, size_t bytes)
     IO_HANDLE h = new_file_write_machine(rootdir, "data-write-test", "float");
 
     size_t b = bytes;
-    m->write(h, data, &b);
+    file_machine->write(h, data, &b);
 
     if (b != bytes) {
         printf("\tFAIL: Read byte mismatch\n");
@@ -203,10 +201,10 @@ run_rotate_test(void *data, size_t bytes)
     int i = 0;
     for (i = 0; i < 3; i++) {
         size_t b0 = bytes;
-        m->write(h0, data, &b0);
+        file_machine->write(h0, data, &b0);
 
         size_t b1 = bytes;
-        m->write(h1, data, &b1);
+        file_machine->write(h1, data, &b1);
 
         if (b0 != bytes || b1 != bytes) {
             printf("\tFAIL: Read byte mismatch\n");
@@ -242,12 +240,24 @@ run_rotate_test(void *data, size_t bytes)
     n->write(null, data, &b1);
 
     b1 = bytes;
-    m->write(h1, data, &b1);
+    file_machine->write(h1, data, &b1);
 
     char fname[1024];
     snprintf(fname, 1024, "%s/data-rotate-test-manual-%05d.float", rootdir, 1);
 
     struct stat s;
+    if (stat(fname, &s) != 0) {
+        printf("\tFAIL: %s not created\n", fname);
+        goto do_return;
+    }
+
+    // Test duplicate filename handling
+    b1 = bytes;
+    IO_HANDLE h2 = new_file_write_machine(rootdir, "data-rotate-test-auto", "float");
+    file_iom_set_auto_rotate(h2);
+    file_machine->write(h2, data, &b1);
+
+    snprintf(fname, 1024, "%s/data-rotate-test-auto-%05d.float", rootdir, 3);
     if (stat(fname, &s) != 0) {
         printf("\tFAIL: %s not created\n", fname);
         goto do_return;
@@ -285,18 +295,18 @@ run_dir_rotate_test(void *data, size_t bytes)
         for (; j < 3; j++) {
             size_t b0, b1;
             b0 = b1 = bytes;
-            m->write(h0, data, &b0);
-            m->write(h1, data, &b1);
 
             char fname[1024];
             struct stat s;
 
+            file_machine->write(h0, data, &b0);
             snprintf(fname, 1024, "%s/%05d/test-%05d.float", rootdir, i, j);
             if (stat(fname, &s) != 0) {
                 printf("\tFAIL: %s not created\n", fname);
                 goto do_return;
             }
 
+            file_machine->write(h1, data, &b1);
             snprintf(fname, 1024, "%s/dir-rotate-test-%05d/test-%05d.float", rootdir, i, j);
             if (stat(fname, &s) != 0) {
                 printf("\tFAIL: %s not created\n", fname);
@@ -337,7 +347,7 @@ run_auto_date_test(void *data, size_t bytes)
         for (; j < 3; j++) {
             size_t b;
             b= bytes;
-            m->write(h, data, &b);
+            file_machine->write(h, data, &b);
 
             char fname[1024];
             struct stat s;
@@ -359,9 +369,9 @@ run_auto_date_test(void *data, size_t bytes)
     file_iom_set_auto_date_fmt(h, "%Y/%m/%d");
 
     size_t b = bytes;
-    m->write(h, data, &b);
-    m->write(h, data, &b);
-    m->write(h, data, &b);
+    file_machine->write(h, data, &b);
+    file_machine->write(h, data, &b);
+    file_machine->write(h, data, &b);
 
     char fname[1024];
     char timestamp[32];
@@ -396,7 +406,7 @@ run_file_tag_test(void *data, size_t bytes)
         int j = 0;
         for (; j < 3; j++) {
             size_t b = bytes;
-            m->write(h, data, &b);
+            file_machine->write(h, data, &b);
             snprintf(fname, 1024, "%s/%s-%05d.float",
                 rootdir, tags[i], j);
 
@@ -425,7 +435,6 @@ main(int nargs, char *argv[])
 {
     fmt_rootdir("/tmp");
     printf("outdir: %s\n", rootdir);
-    m = get_file_machine();
     float *data;
     size_t bytes = fill_float_data(100, &data);
 
