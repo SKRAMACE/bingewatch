@@ -92,9 +92,7 @@ static int
 create_dir(char *dirname)
 {
     struct stat s;
-    stat(dirname, &s);
-
-    if (S_ISDIR(s.st_mode)) {
+    if (stat(dirname, &s) == 0 && S_ISDIR(s.st_mode)) {
         return 0;
     }
 
