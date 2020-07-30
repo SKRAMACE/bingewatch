@@ -18,6 +18,7 @@
 #define FILE_IOM_MAX_STRLEN 1024
 #define FILE_IOM_MAX_PATHLEN 2048
 #define TIMESTAMP_FMT "%Y/%m/%d/%H"
+#define BASEDIR_INDEX_NOINIT 0xffffffff
 
 const IOM *file_machine;
 static IOM *_file_machine = NULL;
@@ -64,6 +65,16 @@ set_input_str(POOL *p, char *src, char **dst)
 
     snprintf(str, len, "%s", src);
     *dst = str;
+}
+
+static void
+init_basedir(POOL *p, struct file_desc_t *fd, char *basedir)
+{
+    if (basedir) {
+        set_input_str(p, basedir, &fd->base_dir);
+    }
+
+    fd->basedir_index = BASEDIR_INDEX_NOINIT;
 }
 
 static void
@@ -157,6 +168,20 @@ rotate_basedir(struct file_desc_t *fd)
     fd->basedir_index++;
 }
 
+static int
+build_basedir(char *buf, size_t bytes, char *basedir, uint32_t index)
+{
+    int x = 0;
+    if (basedir) {
+        x = snprintf(buf, bytes, "/%s-%05d",
+            basedir, index);
+    } else {
+        x = snprintf(buf, bytes, "/%05d", index);
+    }
+
+    return x;
+}
+
 static void
 build_directory_path(struct file_desc_t *fd, char *path, size_t *bytes)
 {
@@ -184,12 +209,17 @@ build_directory_path(struct file_desc_t *fd, char *path, size_t *bytes)
     }
 
     if (fd->flags & FFILE_DIR_ROTATE) {
-        if (fd->base_dir) {
-            x = snprintf(p, r, "/%s-%05d",
-                fd->base_dir, fd->basedir_index);
-        } else {
-            x = snprintf(p, r, "/%05d", fd->basedir_index);
+        uint32_t index = (fd->basedir_index == BASEDIR_INDEX_NOINIT) ? 0 : fd->basedir_index;
+
+        x = build_basedir(p, r, fd->base_dir, index);
+        if (fd->basedir_index == BASEDIR_INDEX_NOINIT) {
+            struct stat s;
+            while (stat(path, &s) == 0) {
+                x = build_basedir(p, r, fd->base_dir, ++index);
+            }
+            fd->basedir_index = index;
         }
+
         p += x;
         r -= x;
     }
@@ -432,15 +462,12 @@ create_file(void *arg)
         set_input_str(p, args->root_dir, &desc->root_dir);
     }
 
-    if (args->base_dir) {
-        set_input_str(p, args->base_dir, &desc->base_dir);
-    }
-
     if (args->ext) {
         set_input_str(p, args->ext, &desc->file_ext);
     }
 
-    desc->basedir_index = 0;
+    init_basedir(p, desc, args->base_dir);
+
     desc->file_index = 0;
     desc->date_fmt = TIMESTAMP_FMT;
 
@@ -704,14 +731,9 @@ file_dir_rotate_filter(IO_HANDLE h, const char *basedir)
     IO_FILTER *f = create_filter(p, name, dir_rotate_fn);
 
     fd->flags |= (FFILE_ROTATE | FFILE_DIR_ROTATE);
-    fd->basedir_index = 0;
-    fd->file_index = 0;
 
-    if (basedir) {
-        size_t len = strlen(basedir) + 1;
-        fd->base_dir = pcalloc(fd->_d.pool, len);
-        snprintf(fd->base_dir, len, "%s", basedir);
-    }
+    init_basedir(p, fd, (char *)basedir);
+    fd->file_index = 0;
 
     f->obj = fd;
 
