@@ -199,7 +199,7 @@ build_directory_path(struct file_desc_t *fd, char *path, size_t *bytes)
 
         if (strncmp(timestamp, fd->timestamp, 32) != 0) {
             strncpy(fd->timestamp, timestamp, 32);
-            fd->basedir_index = 0;
+            fd->basedir_index = BASEDIR_INDEX_NOINIT;
             fd->file_index = 0;
         }
 
