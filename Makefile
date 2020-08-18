@@ -22,7 +22,11 @@ libdir = $(exec_prefix)/lib
 INC = -I./include
 SRC_DIR = src
 OUT_DIR = .
-VPATH = $(SRC_DIR):$(SRC_DIR)/buf:$(SRC_DIR)/networking:$(SRC_DIR)/sdr:$(SRC_DIR)/filter
+VPATH= \
+    $(SRC_DIR):\
+    $(SRC_DIR)/buf:\
+    $(SRC_DIR)/sdr:\
+    $(SRC_DIR)/filter
 
 # Flags
 LCFLAGS += -Werror -fPIC -shared
@@ -86,6 +90,9 @@ buffer-test: machine.c machine-mgmt.c filter.c $(BUF)
 
 file-test: machine.c machine-mgmt.c filter.c file-machine.c null-machine.c
 	$(CC) $(TEST_CFLAGS) test/file-test.c $^ $(INC) -o test/bin/file-test $(TESTLIBS)
+
+sock-test: machine.c machine-mgmt.c filter.c socket-machine.c
+	$(CC) $(TEST_CFLAGS) test/sock-test.c $^ $(INC) -o test/bin/sock-test $(TESTLIBS)
 
 tests: buffer-test file-test
 

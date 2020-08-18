@@ -11,24 +11,23 @@
 #include "radpool.h"
 #include "machine.h"
 #include "filter.h"
-#include "simple-machines.h"
+#include "socket-machine.h"
 #include "simple-buffers.h"
 
-static IOM *sock_machine = NULL;
+const IOM *socket_machine;
+static IOM *_socket_machine = NULL;
 
-static enum af_inet_type default_socktype = AF_INET_NONE;
 static size_t default_payload_size = 0;
 
-static size_t default_udp_size = UDP_PACKET_SIZE;
 static size_t default_tcp_size = TCP_PACKET_SIZE;
 
-static struct sock_t {
-    int fd; 
-    enum af_inet_type socktype;
-    struct sockaddr_in srv_addr;
-    struct sockaddr_in rem_addr;
+static struct sock_desc_t {
+    int fd;
+    enum sock_type_e type;
+    enum sock_protocol_e protocol;
+    struct sockaddr_in addr;
     size_t payload_size;
-    struct sock_t *next;        // Pointer to next ring descriptor
+    struct sock_desc_t *next;        // Pointer to next ring descriptor
 
     IO_HANDLE handle;         // IO Handle for this buffer
     char in_use;              // Flag designates sock memory in use
@@ -41,26 +40,7 @@ static struct sock_t {
 static pthread_mutex_t sock_list_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static inline void
-sanitize_args(struct sockiom_args *args)
-{
-    switch(args->socktype) {
-    case AF_INET_UDP:
-        if (0 == args->payload_size) {
-            args->payload_size = default_udp_size;
-        }
-    case AF_INET_TCP:
-        if (0 == args->payload_size) {
-            args->payload_size = default_tcp_size;
-        }
-        break;
-    default:
-        args->socktype = default_socktype;
-        args->payload_size = default_payload_size;
-    }
-}
-
-static inline void
-acquire_socket(struct sock_t *s)
+acquire_socket(struct sock_desc_t *s)
 {
     pthread_mutex_lock(&s->lock);
     s->in_use++;
@@ -68,7 +48,7 @@ acquire_socket(struct sock_t *s)
 }
 
 static inline void
-release_socket(struct sock_t *s)
+release_socket(struct sock_desc_t *s)
 {
     pthread_mutex_lock(&s->lock);
     s->in_use--;
@@ -77,10 +57,10 @@ release_socket(struct sock_t *s)
 
 // Add a new socket descriptor
 static void
-add_socket(struct sock_t *sock)
+add_socket(struct sock_desc_t *sock)
 {
     pthread_mutex_lock(&sock_list_lock);
-    struct sock_t *s = socks;
+    struct sock_desc_t *s = socks;
     if (!s) {
         socks = sock;
     } else {
@@ -93,11 +73,11 @@ add_socket(struct sock_t *sock)
 }
 
 // Get a pointer to a socket with the specified handle
-static struct sock_t *
+static struct sock_desc_t *
 get_socket(IO_HANDLE h)
 {
     pthread_mutex_lock(&sock_list_lock);
-    struct sock_t *s = socks;
+    struct sock_desc_t *s = socks;
 
     while (s) {
         IO_HANDLE sh = s->handle;
@@ -114,7 +94,7 @@ get_socket(IO_HANDLE h)
 }
 
 static void
-free_sock(struct sock_t *sock) {
+free_sock(struct sock_desc_t *sock) {
     if (!sock) {
         return;
     }
@@ -128,9 +108,9 @@ static void
 destroy_sock(IO_HANDLE h)
 {
     pthread_mutex_lock(&sock_list_lock);
-    struct sock_t *s = socks;
+    struct sock_desc_t *s = socks;
 
-    struct sock_t *sp = NULL;
+    struct sock_desc_t *sp = NULL;
     while (s) {
         if (s->handle == h) {
             break;
@@ -172,7 +152,7 @@ udp_read(IO_FILTER_ARGS)
     IO_HANDLE *handle = (IO_HANDLE *)IO_FILTER_ARGS_FILTER->obj;
 
     // Get socket from handle
-    struct sock_t *sock = get_socket(*handle);
+    struct sock_desc_t *sock = get_socket(*handle);
     if (!sock) {
         *IO_FILTER_ARGS_BYTES = 0;
         return IO_ERROR;
@@ -216,7 +196,7 @@ udp_write(IO_FILTER_ARGS)
     IO_HANDLE *handle = (IO_HANDLE *)IO_FILTER_ARGS_FILTER->obj;
 
     // Get socket from handle
-    struct sock_t *sock = get_socket(*handle);
+    struct sock_desc_t *sock = get_socket(*handle);
     if (!sock) {
         *IO_FILTER_ARGS_BYTES = 0;
         return IO_ERROR;
@@ -229,7 +209,7 @@ udp_write(IO_FILTER_ARGS)
     while (remaining) {
         size_t b = (remaining > sock->payload_size) ? sock->payload_size : remaining;
 
-        struct sockaddr *addr = (struct sockaddr *)&sock->rem_addr;
+        struct sockaddr *addr = (struct sockaddr *)&sock->addr;
         int bytes_sent = sendto(sock->fd, IO_FILTER_ARGS_BUF, b, 0, addr, sizeof(struct sockaddr_in));
 
         if (bytes_sent < 0) {
@@ -263,139 +243,82 @@ tcp_write(IO_FILTER_ARGS)
  * Create new filters to interface directly with the socket
  */
 static enum io_status
-init_filters(struct sock_t *sock)
+init_filters(struct sock_desc_t *sock)
 {
-    // Create io descriptors
-    if (sock->srv_addr.sin_addr.s_addr && sock->srv_addr.sin_port) {
-        sock->io_read = (struct io_desc *)pcalloc(sock->pool, sizeof(struct io_desc));
-        if (!sock->io_read) {
-            printf("Failed to initialize read descriptor\n");
-            return IO_ERROR;
-        }
-        sock->io_read->alloc = sock->pool;
-    }
+    POOL *fpool = create_subpool(sock->pool);
 
-    if (sock->rem_addr.sin_addr.s_addr && sock->rem_addr.sin_port) {
-        sock->io_write = (struct io_desc *)pcalloc(sock->pool, sizeof(struct io_desc));
-        if (!sock->io_write) {
-            printf("Failed to initialize read descriptor\n");
-            return IO_ERROR;
-        }
-        sock->io_write->alloc = sock->pool;
+    struct io_desc *d = NULL;
+    d = (struct io_desc *)pcalloc(fpool, sizeof(struct io_desc));
+    if (!d) {
+        printf("ERROR: Failed to initialize socket filter\n");
+        goto failure;
     }
+    d->alloc = fpool;
+
+    const char *filter_str = (sock->protocol == AF_INET_UDP) ? "_udp" :
+                             (sock->protocol == AF_INET_TCP) ? "_tcp" : NULL;
     
-    // Create base filters
-    struct io_filter_t *fil;
-    if (sock->io_read) {
-        switch (sock->socktype) {
-        case AF_INET_UDP:
-            fil = create_filter(sock->pool, "_udp", udp_read);
-            break;
-        case AF_INET_TCP:
-            fil = create_filter(sock->pool, "_tcp", tcp_read);
-            break;
-        default:
-            fil = NULL;
-            printf("Invalid socket type\n");
-        }
-
-        if (!fil) {
-            printf("Failed to initialize read filter\n");
-            return IO_ERROR;
-        }
-
-        // Set socket handle as the filter object
-        IO_HANDLE *h;
-        h = palloc(fil->alloc, sizeof(IO_HANDLE));
-        *h = sock->handle;
-        fil->obj = h;
-
-        // Set filters as io_desc object
-        sock->io_read->obj = fil;
+    io_filter_fn filter_fn = NULL;
+    switch (sock->type) {
+    case SOCK_TYPE_SERVER:
+        sock->io_read = d;
+        filter_fn = (sock->protocol == AF_INET_UDP) ? udp_read :
+                    (sock->protocol == AF_INET_TCP) ? tcp_read : NULL;
+        break;
+    case SOCK_TYPE_CLIENT:
+        sock->io_write = d;
+        filter_fn = (sock->protocol == AF_INET_UDP) ? udp_write :
+                    (sock->protocol == AF_INET_TCP) ? tcp_write : NULL;
+        break;
+    default:
+        printf("ERROR: Unknown socket type (%d)\n", sock->type);
+        goto failure;
     }
 
-    if (sock->io_write) {
-        switch (sock->socktype) {
-        case AF_INET_UDP:
-            fil = create_filter(sock->pool, "_udp", udp_write);
-            break;
-        case AF_INET_TCP:
-            fil = create_filter(sock->pool, "_tcp", tcp_write);
-            break;
-        default:
-            fil = NULL;
-            fil = NULL;
-            printf("Invalid socket type\n");
-        }
+    if (!filter_fn) {
+        printf("ERROR: Unknown socket protocol (%d)\n", sock->protocol);
+        goto failure;
+    }
 
-        if (!fil) {
-            printf("Failed to initialize write filter\n");
-            return IO_ERROR;
-        }
+    struct io_filter_t *fil = create_filter(fpool, filter_str, filter_fn);
+    if (!fil) {
+        printf("ERROR: Failed to initialize socket filter\n");
+        goto failure;
+    }
 
-        // Set socket handle as the filter object
-        IO_HANDLE *h;
-        h = palloc(fil->alloc, sizeof(IO_HANDLE));
-        *h = sock->handle;
-        fil->obj = h;
+    // Set socket handle as the filter object
+    IO_HANDLE *h;
+    h = palloc(fil->alloc, sizeof(IO_HANDLE));
+    *h = sock->handle;
+    fil->obj = h;
 
-        // Set filters as io_desc object
+    if (sock->type == SOCK_TYPE_SERVER) {
+        sock->io_read->obj = fil;
+    } else {
         sock->io_write->obj = fil;
     }
 
     return IO_SUCCESS;
-}
 
-static enum io_status
-create_udp(struct sock_t *udp, struct sockiom_args *args)
-{
-    printf("Creating new UDP socket: " IP_FMT_STR "\n", IP_FMT(args->rem_ip, args->rem_port));
-
-    udp->fd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (udp->fd < 0) {
-        perror("socket error");
-        return IO_ERROR;
-    }
-
-    udp->srv_addr.sin_family = AF_INET;
-    udp->srv_addr.sin_addr.s_addr = htonl(args->srv_ip);
-    udp->srv_addr.sin_port = htons(args->srv_port);
-
-    udp->rem_addr.sin_family = AF_INET;
-    udp->rem_addr.sin_addr.s_addr = htonl(args->rem_ip);
-    udp->rem_addr.sin_port = htons(args->rem_port);
-
-    // TODO: If there's a bind error, mark the read function as "invalid"
-    if (udp->srv_addr.sin_addr.s_addr && udp->srv_addr.sin_port) {
-        printf("Binding UDP socket to: " IP_FMT_STR "\n", IP_FMT(args->srv_ip, args->srv_port));
-        struct sockaddr *addr = (struct sockaddr *)&udp->srv_addr;
-        if (bind(udp->fd, addr, sizeof(struct sockaddr_in)) < 0) {
-            perror("error binding");
-            return IO_ERROR;
-        }
-    }
-
-    udp->socktype = AF_INET_UDP;
-    udp->payload_size = default_udp_size;
-
-    return IO_SUCCESS;
+failure:
+    pfree(fpool);
+    return IO_ERROR;
 }
 
 static IO_HANDLE
 create_sock(void *arg)
 {
     struct sockiom_args *args = (struct sockiom_args *)arg;
-    sanitize_args(args);
 
-    POOL *p = create_subpool(sock_machine->alloc);
+    POOL *p = create_subpool(_socket_machine->alloc);
     if (!p) {
         printf("ERROR: Failed to create memory pool\n");
         return 0;
     }
 
-    struct sock_t *sock = pcalloc(p, sizeof(struct sock_t));
+    struct sock_desc_t *sock = pcalloc(p, sizeof(struct sock_desc_t));
     if (!sock) {
-        printf("ERROR: Failed to allocate %#zx bytes for sock descriptor\n", sizeof(struct sock_t));
+        printf("ERROR: Failed to allocate %#zx bytes for sock descriptor\n", sizeof(struct sock_desc_t));
         pfree(p);
         return 0;
     }
@@ -403,28 +326,34 @@ create_sock(void *arg)
     pthread_mutex_init(&sock->lock, NULL);
     sock->pool = p;
 
-    int status;
-    switch (args->socktype) {
-    case AF_INET_UDP:
-        status = create_udp(sock, args);
-        break;
-    case AF_INET_TCP:
-        printf("TCP not implemented\n");
-        status = IO_ERROR;
-        break;
-    default:
-        status = IO_ERROR;
+    // Create an IPv4 Socket
+    sock->fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sock->fd < 0) {
+        printf("ERROR: socket error\n");
+        return IO_ERROR;
     }
 
-    if (status != IO_SUCCESS) {
-        pfree(p);
-        return 0;
+    // Set socket parameters
+    sock->addr.sin_family = AF_INET;
+    sock->addr.sin_addr.s_addr = htonl(args->ip);
+    sock->addr.sin_port = htons(args->port);
+    sock->protocol = args->protocol;
+    sock->type = args->type;
+    sock->payload_size = args->payload_size;
+
+    // Attempt to bind to socket (server only)
+    if (sock->type == SOCK_TYPE_SERVER) {
+        struct sockaddr *addr = (struct sockaddr *)&sock->addr;
+        if (bind(sock->fd, addr, sizeof(struct sockaddr_in)) != 0) {
+            printf("ERROR: Failed to bind to " IP_FMT_STR "\n",
+                IP_FMT(sock->addr.sin_addr.s_addr, sock->addr.sin_port));
+            return 0;
+        }
     }
 
-    sock->handle = request_handle(sock_machine);
+    sock->handle = request_handle(_socket_machine);
 
-    status = init_filters(sock);
-    if (status != IO_SUCCESS) {
+    if (init_filters(sock) != IO_SUCCESS) {
         printf("ERROR: Failed to initialize filters\n");
         pfree(p);
         return 0;
@@ -437,7 +366,7 @@ create_sock(void *arg)
 static int
 sock_read(IO_HANDLE h, void *buf, size_t *len)
 {
-    struct sock_t *sock = get_socket(h);
+    struct sock_desc_t *sock = get_socket(h);
     if (!sock) {
         *len = 0;
         return IO_ERROR;
@@ -457,7 +386,7 @@ sock_read(IO_HANDLE h, void *buf, size_t *len)
 static int
 sock_write(IO_HANDLE h, void *buf, size_t *len)
 {
-    struct sock_t *sock = get_socket(h);
+    struct sock_desc_t *sock = get_socket(h);
     if (!sock) {
         *len = 0;
         return IO_ERROR;
@@ -471,24 +400,13 @@ sock_write(IO_HANDLE h, void *buf, size_t *len)
     return status;
 }
 
-void
-sockiom_update_defaults(struct sockiom_args *s)
-{
-    sanitize_args(s);
-
-    pthread_mutex_lock(&sock_list_lock);
-    default_socktype = s->socktype;
-    default_payload_size = s->payload_size;
-    pthread_mutex_unlock(&sock_list_lock);
-}
-
 /*
  * Fills the struct with a copy of the current machine
  */
 const IOM*
 get_sock_machine()
 {
-    IOM *machine = sock_machine;
+    IOM *machine = _socket_machine;
     if (!machine) {
         machine = machine_register("socket");
 
@@ -499,7 +417,52 @@ get_sock_machine()
         machine->write = sock_write;
         machine->obj = NULL;
 
-        sock_machine = machine;
+        _socket_machine = machine;
+        socket_machine = machine;
     }
     return (const IOM *)machine;
+}
+
+void
+set_payload_size(IO_HANDLE h, size_t payload_size)
+{
+    struct sock_desc_t *sd = (struct sock_desc_t *)machine_get_desc(h);
+    if (!sd) {
+        return;
+    }
+
+    pthread_mutex_t *lock = &sd->lock;
+    pthread_mutex_lock(lock);
+
+    sd->payload_size = payload_size;
+
+    pthread_mutex_unlock(lock);
+}
+
+IO_HANDLE
+new_socket_machine(int ip, short port, size_t payload_size,
+    enum sock_type_e type, enum sock_protocol_e protocol)
+{
+    struct sockiom_args args = {
+        .ip = ip,
+        .port = port,
+        .type = type,
+        .protocol = protocol,
+        .payload_size = payload_size,
+    };
+
+    const IOM *sm = get_sock_machine();
+    return sm->create(&args);
+}
+
+IO_HANDLE
+new_udp_server_machine(int ip, short port)
+{
+    return new_socket_machine(ip, port, UDP_PACKET_SIZE, SOCK_TYPE_SERVER, AF_INET_UDP);
+}
+
+IO_HANDLE
+new_udp_client_machine(int ip, short port)
+{
+    return new_socket_machine(ip, port, UDP_PACKET_SIZE, SOCK_TYPE_CLIENT, AF_INET_UDP);
 }
