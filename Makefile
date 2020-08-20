@@ -63,6 +63,7 @@ SDR = \
 MACHINES = \
 	socket-machine.c \
 	file-machine.c \
+	fifo-machine.c \
 	null-machine.c \
     $(BUF) \
 	$(SDR) \

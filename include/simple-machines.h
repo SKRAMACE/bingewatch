@@ -5,11 +5,13 @@
 #include "machine.h"
 #include "filter.h"
 #include "file-machine.h"
+#include "fifo-machine.h"
 #include "socket-machine.h"
 #else
 #include <bingewatch/machine.h>
 #include <bingewatch/filter.h>
 #include <bingewatch/file-machine.h>
+#include <bingewatch/fifo-machine.h>
 #include <bingewatch/socket-machine.h>
 #endif
 
@@ -31,6 +33,12 @@ void file_iom_set_auto_date(IO_HANDLE h);
 void file_iom_set_auto_date_fmt(IO_HANDLE h, const char *fmt);
 IO_FILTER *file_rotate_filter(IO_HANDLE h);
 IO_FILTER *file_dir_rotate_filter(IO_HANDLE h, const char *basedir);
+
+/***** FIFO MACHINE *****/
+IO_HANDLE new_fifo_write_machine(char *fname);
+IO_HANDLE new_fifo_read_machine(char *fname);
+
+void fifo_iom_set_leave_open(IO_HANDLE h);
 
 /***** NULL MACHINE *****/
 IO_HANDLE new_null_machine();
