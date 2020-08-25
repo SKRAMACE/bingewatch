@@ -12,6 +12,7 @@
 #include "sdrs.h"
 
 #define SOAPY_SERIAL_LEN 32
+#define MAX_ERROR_COUNT 32
 
 // Machine Implementation List
 static IOM *soapy_rx_machine = NULL;
@@ -34,6 +35,7 @@ struct soapy_channel_t {
     SoapySDRDevice *sdr;
     SoapySDRStream *rx;
     enum soapy_antennas_e antenna;
+    int error_counter;
     float tia_gain;
     float pga_gain;
 };
@@ -143,9 +145,13 @@ read_data_from_hw(IO_FILTER_ARGS)
     int samples_read;
     samples_read = SoapySDRDevice_readStream(chan->sdr, chan->rx, buffs, bytes, &flags, &timeNs, 100000);
     if (samples_read < 0) {
-        printf("readStream fail: %s\n", SoapySDRDevice_lastError());
+        int e = samples_read;
+        const char *e_msg = SoapySDRDevice_lastError();
+        printf("SoapySDRDevice_readStream() error %d: %s\n", e, e_msg);
         *IO_FILTER_ARGS_BYTES = 0;
-        return IO_ERROR;
+        return (++chan->error_counter > MAX_ERROR_COUNT) ? IO_ERROR : IO_SUCCESS;
+    } else {
+        chan->error_counter = 0;
     }
 
     *IO_FILTER_ARGS_BYTES = samples_read * sizeof(complex float);
