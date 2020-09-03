@@ -8,7 +8,6 @@
 #include <netinet/ip.h>
 #include <unistd.h>
 
-#include "radpool.h"
 #include "machine.h"
 #include "filter.h"
 #include "socket-machine.h"

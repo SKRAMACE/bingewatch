@@ -3,7 +3,6 @@
 #include <string.h>
 #include <inttypes.h>
 
-#include "radpool.h"
 #include "machine.h"
 
 #define DECLARE_CREATE_NOIMPL \

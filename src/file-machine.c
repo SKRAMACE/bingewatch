@@ -6,7 +6,6 @@
 #include <string.h>
 #include <inttypes.h>
 #include <pthread.h>
-#include <radpool.h>
 
 #include <sys/stat.h>
 #include <sys/time.h>

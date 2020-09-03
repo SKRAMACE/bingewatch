@@ -5,7 +5,6 @@
 #include <pthread.h>
 #include <unistd.h>
 
-#include "radpool.h"
 #include "machine.h"
 #include "filter.h"
 #include "block-list-buffer.h"

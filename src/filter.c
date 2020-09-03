@@ -2,7 +2,6 @@
 #include <string.h>
 #include <inttypes.h>
 
-#include "radpool.h"
 #include "machine.h"
 #include "filter.h"
 

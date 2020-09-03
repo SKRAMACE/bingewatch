@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <unistd.h>
-#include <radpool.h>
 
 #include "machine.h"
 #include "filter.h"

@@ -10,7 +10,6 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-#include "radpool.h"
 #include "machine.h"
 #include "stream.h"
 #include "simple-buffers.h"

@@ -3,10 +3,9 @@
 #include <string.h>
 #include <inttypes.h>
 #include <pthread.h>
-#include <radpool.h>
 
-#include "filter.h"
 #include "machine.h"
+#include "filter.h"
 #include "sdr-machine.h"
 #include "simple-buffers.h"
 

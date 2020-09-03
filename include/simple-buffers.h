@@ -1,6 +1,12 @@
 #ifndef __BINGEWATCH_BUFFERS_H__
 #define __BINGEWATCH_BUFFERS_H__
 
+#ifdef BINGEWATCH_LOCAL
+#include "machine.h"
+#else
+#include <bingewatch/machine.h>
+#endif
+
 // TODO: Write generic functions which look up the buffer type and return
 //  size_t bw_get_buf_size(IO_HANDLE h);
 

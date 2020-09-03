@@ -4,7 +4,6 @@
 #include <stdlib.h> //free
 #include <string.h>
 #include <complex.h>
-#include <radpool.h>
 
 #include "machine.h"
 #include "filter.h"

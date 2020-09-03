@@ -47,7 +47,7 @@ TEST_CFLAGS=\
 .PHONY: install clean uninstall
 
 TESTLIBS = \
-    -lradpool \
+    -lmemex \
     -lpthread \
     -luuid \
 

@@ -1,7 +1,7 @@
 #ifndef __SDR_MACHINE_H__
 #define __SDR_MACHINE_H__
 
-#include <radpool.h>
+#include <memex.h>
 
 enum sdr_chan_direction_e {
     SDR_CHAN_NOINIT,

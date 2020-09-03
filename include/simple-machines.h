@@ -15,8 +15,6 @@
 #include <bingewatch/socket-machine.h>
 #endif
 
-#include <radpool.h>
-
 /***** SOCKET MACHINE *****/
 IO_HANDLE new_udp_server_machine(int ip, short port);
 IO_HANDLE new_udp_client_machine(int ip, short port);

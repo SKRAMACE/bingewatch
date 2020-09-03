@@ -1,6 +1,12 @@
 #ifndef __SDRS_H__
 #define __SDRS_H__
 
+#ifdef BINGEWATCH_LOCAL
+#include "machine.h"
+#else
+#include <bingewatch/machine.h>
+#endif
+
 /* SOAPY SDR SUPPORT */
 enum supported_soapy_types_e {
     SDR_TYPE_LIME,

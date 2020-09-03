@@ -4,7 +4,6 @@
 #include <inttypes.h>
 #include <pthread.h>
 
-#include "radpool.h"
 #include "machine.h"
 #include "filter.h"
 #include "block-list-buffer.h"
