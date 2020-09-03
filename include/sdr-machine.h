@@ -37,6 +37,7 @@ struct sdr_channel_t {
     POOL *pool;
     IO_HANDLE handle;
     char in_use;
+    char error;
 
     double freq;
     double rate;

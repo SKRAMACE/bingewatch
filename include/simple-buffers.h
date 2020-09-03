@@ -77,4 +77,7 @@ struct afpb_packet {
 int afpb_next_full_packet(IO_HANDLE h, struct afpb_packet *packet);
 void afpb_done_with_packet(void *addr);
 
+
+int is_in_use(IO_HANDLE h);
+
 #endif

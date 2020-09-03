@@ -13,8 +13,14 @@
 #define SOAPY_SERIAL_LEN 32
 #define MAX_ERROR_COUNT 32
 
-// Machine Implementation List
-static IOM *soapy_rx_machine = NULL;
+enum soapy_var_e {
+    SOAPY_VAR_FREQ,
+    SOAPY_VAR_RATE,
+    SOAPY_VAR_BANDWIDTH,
+};
+
+const IOM *soapy_rx_machine;
+static IOM *_soapy_rx_machine = NULL;
 
 // Machine Structs
 struct soapy_api_t {
@@ -92,6 +98,13 @@ soapy_channel_init(struct soapy_channel_t *chan)
         return IO_ERROR;
     }
 
+    // Set bandwidth
+    double bandwidth = (chan->_sdr.bandwidth) ? chan->_sdr.bandwidth : chan->_sdr.rate;
+    if (SoapySDRDevice_setBandwidth(chan->sdr, SOAPY_SDR_RX, 0, bandwidth) != 0) {
+        printf("setSampleRate fail: %s\n", SoapySDRDevice_lastError());
+        return IO_ERROR;
+    }
+
     // Set frequency
     if (SoapySDRDevice_setFrequency(chan->sdr, SOAPY_SDR_RX, 0, chan->_sdr.freq, NULL) != 0) {
         printf("setFrequency fail: %s\n", SoapySDRDevice_lastError());
@@ -127,6 +140,10 @@ read_data_from_hw(IO_FILTER_ARGS)
 {
     // Dereference channel from filter object
     struct soapy_channel_t *chan = (struct soapy_channel_t *)IO_FILTER_ARGS_FILTER->obj;
+
+    if (chan->_sdr.error) {
+        return IO_ERROR;
+    }
 
     if (!chan->_sdr.init) {
         if (soapy_channel_init(chan) != IO_SUCCESS) {
@@ -369,12 +386,97 @@ soapy_create(void *args)
     return 0;
 }
 
+static int
+soapy_set_val(IO_HANDLE h, int var, double val)
+{
+    int ret = 1;
+
+    struct soapy_channel_t *soapy = soapy_get_channel(h);
+    struct sdr_channel_t *chan = &soapy->_sdr;
+
+    while (chan->in_use) {
+        continue;
+    }
+
+    pthread_mutex_lock(&chan->lock);
+    switch (var) {
+    case SOAPY_VAR_FREQ:
+        chan->freq = val; break;
+    case SOAPY_VAR_RATE:
+        chan->rate = val; break;
+    case SOAPY_VAR_BANDWIDTH:
+        chan->bandwidth = val; break;
+    default:
+        printf("Unknown Var (%d)\n", var);
+        goto failure;
+    }
+
+    if (!chan->init) {
+        goto success;
+    }
+
+    SoapySDRDevice_deactivateStream(soapy->sdr, soapy->rx, 0, 0);
+
+    switch (var) {
+    case SOAPY_VAR_FREQ:
+        if (SoapySDRDevice_setFrequency(soapy->sdr, SOAPY_SDR_RX, 0, val, NULL) != 0) {
+            goto soapy_error;
+        }
+        break;
+    case SOAPY_VAR_RATE:
+        if (SoapySDRDevice_setSampleRate(soapy->sdr, SOAPY_SDR_RX, 0, val) != 0) {
+            goto soapy_error;
+        }
+        break;
+    case SOAPY_VAR_BANDWIDTH:
+        if (SoapySDRDevice_setBandwidth(soapy->sdr, SOAPY_SDR_RX, 0, val) != 0) {
+            goto soapy_error;
+        }
+        break;
+    default:
+        printf("Unknown Var (%d)\n", var);
+        goto failure;
+    }
+
+    SoapySDRDevice_activateStream(soapy->sdr, soapy->rx, 0, 0, 0);
+
+success:
+    pthread_mutex_unlock(&chan->lock);
+    return 0;
+
+soapy_error:
+    printf("Soapy Error: %s\n", SoapySDRDevice_lastError());
+    chan->error = 1;
+
+failure:
+    pthread_mutex_unlock(&chan->lock);
+    return 1;
+}
+
+int
+soapy_rx_set_freq(IO_HANDLE h, double freq)
+{
+    return soapy_set_val(h, SOAPY_VAR_FREQ, freq);
+}
+
+int
+soapy_rx_set_samp_rate(IO_HANDLE h, double samp_rate)
+{
+    return soapy_set_val(h, SOAPY_VAR_RATE, samp_rate);
+}
+
+int
+soapy_rx_set_bandwidth(IO_HANDLE h, double bandwidth)
+{
+    return soapy_set_val(h, SOAPY_VAR_BANDWIDTH, bandwidth);
+}
+
 const IOM *
 get_soapy_rx_machine()
 {
-    IOM *machine = soapy_rx_machine;
+    IOM *machine = _soapy_rx_machine;
     if (!machine) {
-        machine = machine_register("soapy_rx_machine");
+        machine = machine_register("soapy_rx");
 
         sdr_init_machine_functions(machine);
         api_init(machine);
@@ -382,6 +484,7 @@ get_soapy_rx_machine()
         // Local Functions
         machine->create = soapy_create;
 
+        _soapy_rx_machine = machine;
         soapy_rx_machine = machine;
     }
     return (const IOM *)machine;
@@ -405,7 +508,7 @@ soapy_set_gains(IO_HANDLE h, float lna, float tia, float pga)
 }
 
 void
-soapy_set_rx(IO_HANDLE h, float freq, float rate, float bandwidth)
+soapy_set_rx(IO_HANDLE h, double freq, double rate, double bandwidth)
 {
     struct soapy_channel_t *chan = soapy_get_channel(h);
     chan->_sdr.freq = freq;
