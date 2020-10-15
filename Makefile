@@ -59,6 +59,7 @@ BUF = \
 SDR = \
     sdr-rx-machine.c \
     soapy-machine.c \
+    uhd-machine.c \
 
 MACHINES = \
 	socket-machine.c \

@@ -19,12 +19,24 @@ struct soapy_args_t {
 };
 
 const IOM * get_soapy_rx_machine();
-IO_HANDLE new_soapy_rx_machine();
+IO_HANDLE new_soapy_rx_machine(const char *id);
 void soapy_set_gains(IO_HANDLE h, float lna, float tia, float pga);
 void soapy_set_rx(IO_HANDLE h, double freq, double rate, double bandwidth);
 
 int soapy_rx_set_freq(IO_HANDLE h, double freq);
 int soapy_rx_set_samp_rate(IO_HANDLE h, double samp_rate);
 int soapy_rx_set_bandwidth(IO_HANDLE h, double bandwidth);
+
+
+/* UHD SDR SUPPORT */
+const IOM * get_uhd_rx_machine();
+IO_HANDLE new_uhd_rx_machine(const char *id, int channel);
+IO_HANDLE new_b210_rx_machine(const char *id);
+void uhd_set_gain(IO_HANDLE h, float gain);
+void uhd_set_rx(IO_HANDLE h, double freq, double rate, double bandwidth);
+
+int uhd_rx_set_freq(IO_HANDLE h, double freq);
+int uhd_rx_set_samp_rate(IO_HANDLE h, double samp_rate);
+int uhd_rx_set_bandwidth(IO_HANDLE h, double bandwidth);
 
 #endif
