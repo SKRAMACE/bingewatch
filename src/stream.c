@@ -16,7 +16,7 @@
 
 typedef void *(*pthread_fn)(void*);
 
-#define DEFAULT_BUF_LEN 1*MB
+#define DEFAULT_BUF_LEN 10*MB
 
 /*** State Machine ***/
 #define PRINT_STATE(s) (\

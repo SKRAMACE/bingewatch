@@ -10,7 +10,7 @@
 #include "simple-buffers.h"
 
 #define DEFAULT_BUF_BYTES 100*MB
-#define DEFAULT_BLK_BYTES   1*MB
+#define DEFAULT_BLK_BYTES   10*MB
 #define DEFAULT_ALIGN 4
 
 static size_t default_buf_bytes = DEFAULT_BUF_BYTES;
