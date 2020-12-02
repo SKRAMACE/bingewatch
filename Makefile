@@ -67,7 +67,6 @@ MACHINES = \
 	fifo-machine.c \
 	null-machine.c \
     $(BUF) \
-	$(SDR) \
 
 FILTERS = \
 	filters.c \
@@ -82,6 +81,12 @@ SRC = \
 	$(FILTERS) \
 
 $(LIB): $(SRC)
+	$(CC) $(CFLAGS) $^ $(INC) $(LDFLAGS) $(LCFLAGS) -o $@
+
+libbingewatch-soapy: sdr-rx-machine.c soapy-machine.c
+	$(CC) $(CFLAGS) $^ $(INC) $(LDFLAGS) $(LCFLAGS) -o $@
+
+libbingewatch-uhd: sdr-rx-machine.c uhd-machine.c
 	$(CC) $(CFLAGS) $^ $(INC) $(LDFLAGS) $(LCFLAGS) -o $@
 
 %.o: %.c
