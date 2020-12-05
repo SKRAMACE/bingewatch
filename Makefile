@@ -30,7 +30,7 @@ VPATH= \
 
 # Flags
 LCFLAGS += -Werror -fPIC -shared
-LDFLAGS += -Wl,-soname,$(LIBFILE)
+LDFLAGS += 
 
 CFLAGS += -DBINGEWATCH_LOCAL
 
@@ -44,7 +44,7 @@ TEST_CFLAGS=\
     -DBINGEWATCH_LOCAL \
 
 .IGNORE: clean
-.PHONY: install clean uninstall
+.PHONY: install clean uninstall all uhd soapy
 
 TESTLIBS = \
     -lmemex \
@@ -58,8 +58,6 @@ BUF = \
 
 SDR = \
     sdr-rx-machine.c \
-    soapy-machine.c \
-    uhd-machine.c \
 
 MACHINES = \
 	socket-machine.c \
@@ -79,14 +77,15 @@ SRC = \
 	stream.c \
 	$(MACHINES) \
 	$(FILTERS) \
+	$(SDR) \
 
 $(LIB): $(SRC)
 	$(CC) $(CFLAGS) $^ $(INC) $(LDFLAGS) $(LCFLAGS) -o $@
 
-libbingewatch-soapy: sdr-rx-machine.c soapy-machine.c
+libbingewatch_soapy: $(LIB) soapy-machine.c
 	$(CC) $(CFLAGS) $^ $(INC) $(LDFLAGS) $(LCFLAGS) -o $@
 
-libbingewatch-uhd: sdr-rx-machine.c uhd-machine.c
+libbingewatch_uhd: $(LIB) uhd-machine.c
 	$(CC) $(CFLAGS) $^ $(INC) $(LDFLAGS) $(LCFLAGS) -o $@
 
 %.o: %.c
@@ -103,16 +102,10 @@ sock-test: machine.c machine-mgmt.c filter.c socket-machine.c
 
 tests: buffer-test file-test
 
+all: $(LIB) $(LIB)_soapy $(LIB)_uhd
+
 install: $(LIB)
-	install -m 0755 $(LIB) -D $(DESTDIR)$(libdir)/$(LIBFILE)
-	cd $(DESTDIR)$(libdir); \
-		ln -f -s $(LIB).so.$(VERSION) $(LIB).so.$(SO_VERSION); \
-		ln -f -s $(LIB).so.$(SO_VERSION) $(LIB).so
-	mkdir -p $(DESTDIR)$(includedir)/$(HDR_DIR)
-	install -m 0644 -t $(DESTDIR)$(includedir)/$(HDR_DIR) include/*
-ifneq ($(NOLDCONFIG),y)
-	ldconfig
-endif
+	@./install
 
 uninstall:
 	rm -f $(DESTDIR)$(libdir)/$(LIB)*

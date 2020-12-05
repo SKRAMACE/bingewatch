@@ -1,0 +1,36 @@
+#!/bin/bash
+
+. .version
+
+ROOT=/usr/local
+LIB=$ROOT/lib
+
+if [[ $EUID -ne 0 ]]; then
+   echo "This script must be run as root"
+   exit 1
+fi
+
+LIBS=$(ls libbingewatch*)
+for x in $LIBS; do
+    ver=$x.so.$VERSION
+    cp $x $LIB/$ver
+    chmod 0755 $LIB/$ver
+done
+
+bw_dir=$(pwd);
+cd $LIB
+
+for x in $LIBS; do
+    ver=$x.so.$VERSION
+    so=$x.so.$SO_VERSION
+    ln -f -s $ver $so
+    ln -f -s $so $x.so
+done
+
+cd $bw_dir
+
+INC=$ROOT/include/bingewatch
+if [ ! -d $INC ]; then
+    mkdir -p $INC
+fi
+install -m 0644 -t $INC include/*
