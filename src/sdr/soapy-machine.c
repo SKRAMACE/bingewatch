@@ -153,24 +153,29 @@ read_data_from_hw(IO_FILTER_ARGS)
         chan->_sdr.init = 1;
     }
 
-    void *buffs[] = {IO_FILTER_ARGS_BUF};
+    float complex *data = (float complex *)IO_FILTER_ARGS_BUF;
+    void *buffs[] = {data};
     int flags;
     long long timeNs;
 
-    size_t bytes = *IO_FILTER_ARGS_BYTES / sizeof(complex float);
-    int samples_read;
-    samples_read = SoapySDRDevice_readStream(chan->sdr, chan->rx, buffs, bytes, &flags, &timeNs, 100000);
-    if (samples_read < 0) {
-        int e = samples_read;
-        const char *e_msg = SoapySDRDevice_lastError();
-        printf("SoapySDRDevice_readStream() error %d: %s\n", e, e_msg);
-        *IO_FILTER_ARGS_BYTES = 0;
-        return (++chan->error_counter > MAX_ERROR_COUNT) ? IO_ERROR : IO_SUCCESS;
-    } else {
-        chan->error_counter = 0;
+    size_t remaining = *IO_FILTER_ARGS_BYTES / sizeof(complex float);
+    while (remaining) {
+        size_t n_samp = remaining;
+        int samples_read;
+        samples_read = SoapySDRDevice_readStream(chan->sdr, chan->rx, buffs, n_samp, &flags, &timeNs, 100000);
+        if (samples_read < 0) {
+            int e = samples_read;
+            const char *e_msg = SoapySDRDevice_lastError();
+            printf("SoapySDRDevice_readStream() error %d: %s\n", e, e_msg);
+            *IO_FILTER_ARGS_BYTES = 0;
+            return (++chan->error_counter > MAX_ERROR_COUNT) ? IO_ERROR : IO_SUCCESS;
+        } else {
+            chan->error_counter = 0;
+        }
+        remaining -= (size_t)samples_read;
+        data += samples_read;
     }
 
-    *IO_FILTER_ARGS_BYTES = samples_read * sizeof(complex float);
     return IO_SUCCESS;
 }
 
