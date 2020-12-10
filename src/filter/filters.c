@@ -3,7 +3,7 @@
 #include <inttypes.h>
 
 #include "machine.h"
-#include "stream.h"
+#include "segment.h"
 #include "filter.h"
 
 struct generic_counter_t {

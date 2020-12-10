@@ -75,6 +75,7 @@ SRC = \
 	machine-mgmt.c \
 	filter.c \
 	stream.c \
+    segment.c \
 	$(MACHINES) \
 	$(FILTERS) \
 	$(SDR) \
