@@ -15,5 +15,6 @@ void stream_cleanup();
 
 int io_stream_add_segment(IO_STREAM h, int in, int out, int flag);
 int io_stream_add_tee_segment(IO_STREAM h, int in, int out, int out1, int flag);
+void stream_set_log_level(char *level);
 
 #endif

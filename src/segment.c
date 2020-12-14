@@ -5,6 +5,9 @@
 #include "segment.h"
 #include "stream-state.h"
 
+#define LOGEX_TAG "BW-SEG"
+#include "bw-log.h"
+
 typedef void *(*pthread_fn)(void*);
 
 #define SEGMENT_COMPLETE(s) s->complete.fn(s->complete.arg)
@@ -32,7 +35,7 @@ struct io_segment_t {
 
     // Thread variables
     pthread_t thread;               // Thread for this segment
-    pthread_mutex_t *lock;          // Stream lock
+    pthread_mutex_t lock;           // Stream lock
     pthread_fn fn;                  // Function for running the segment
 
     // State machine
@@ -93,11 +96,11 @@ cleanup_segment(struct io_segment_t *seg)
     const IOM *dst = get_machine_ref(seg->out);
     const IOM *dst1 = get_machine_ref(seg->out1);
 
-    pthread_mutex_lock(seg->lock);
+    pthread_mutex_lock(&seg->lock);
 
     // TODO: Print metrics from this segment
 
-    pthread_mutex_unlock(seg->lock);
+    pthread_mutex_unlock(&seg->lock);
 }
 
 
@@ -134,12 +137,12 @@ read_from_source(const IOM *src, struct io_segment_t *seg, char *buf, size_t *by
     case IO_SUCCESS:
         break;
     case IO_COMPLETE:
-        printf("Segment %s read complete\n", src->name);
+        info("Segment %s read complete", src->name);
         SEGMENT_COMPLETE(seg);
         stop_segment(seg);
         break;
     default:
-        printf("Segment %s read error\n", src->name);
+        error("Segment %s read error", src->name);
         SEGMENT_ERROR(seg);
         stop_segment(seg);
         return SEG_CTRL_TOP;
@@ -150,9 +153,9 @@ read_from_source(const IOM *src, struct io_segment_t *seg, char *buf, size_t *by
     }
 
     // Calculate input metrics
-    pthread_mutex_lock(seg->lock);
+    //pthread_mutex_lock(&seg->lock);
     //calculate_metrics(&seg->in_stats, *bytes);
-    pthread_mutex_unlock(seg->lock);
+    //pthread_mutex_unlock(&seg->lock);
 
     return SEG_CTRL_PROCEED;
 }
@@ -170,7 +173,7 @@ write_to_dest(const IOM *dst, int out_index, struct io_segment_t *seg, char *buf
         out = seg->out1;
         break;
     default:
-        printf("ERROR: Invalid segment output index (%d)\n", out_index);
+        error("Invalid segment output index (%d)", out_index);
         SEGMENT_ERROR(seg);
         stop_segment(seg);
         return SEG_CTRL_TOP;
@@ -188,19 +191,19 @@ write_to_dest(const IOM *dst, int out_index, struct io_segment_t *seg, char *buf
         case IO_SUCCESS:
             break;
         case IO_COMPLETE:
-            printf("Segment %s write complete\n", dst->name);
+            info("Segment %s write complete", dst->name);
             SEGMENT_COMPLETE(seg);
             stop_segment(seg);
             break;
         default:
-            printf("Segment %s write error\n", dst->name);
+            error("Segment %s write error", dst->name);
             SEGMENT_ERROR(seg);
             stop_segment(seg);
             return SEG_CTRL_TOP;
         }
 
         if (_bytes > remaining) {
-            printf("Segment %s counter error\n", dst->name);
+            error("Segment %s counter error", dst->name);
             SEGMENT_ERROR(seg);
             stop_segment(seg);
             return SEG_CTRL_TOP;
@@ -212,9 +215,9 @@ write_to_dest(const IOM *dst, int out_index, struct io_segment_t *seg, char *buf
     }
 
     // Calculate output metrics
-    pthread_mutex_lock(seg->lock);
+    //pthread_mutex_lock(&seg->lock);
     //calculate_metrics(out_stats, wr_bytes);
-    pthread_mutex_unlock(seg->lock);
+    //pthread_mutex_unlock(&seg->lock);
 
     return SEG_CTRL_PROCEED;
 }
@@ -244,14 +247,14 @@ segment_run(void *arg)
     POOL *pool = create_pool();
     char *buf = palloc(pool, buflen);
     if (!buf) {
-        printf("ERROR: Failed to allocate segment buffer.\n");
+        error("Failed to allocate segment buffer.");
         SEGMENT_ERROR(seg);
     }
 
-    pthread_mutex_lock(seg->lock);
+    //pthread_mutex_lock(&seg->lock);
     //gettimeofday(&seg->in_stats.t0, NULL);
     //gettimeofday(&seg->out_stats.t0, NULL);
-    pthread_mutex_unlock(seg->lock);
+    //pthread_mutex_unlock(&seg->lock);
 
     if (dst1) {
         snprintf(seg_name, SEG_NAME_LEN, "%s -> %s & %s (%d)",
@@ -262,7 +265,7 @@ segment_run(void *arg)
     }
 
     seg_name[SEG_NAME_LEN - 1] = '\0';
-    printf("Starting Segment %s\n", seg_name);
+    info("Starting Segment %s", seg_name);
 
     seg->running = 1;
     while (seg->running) {
@@ -336,12 +339,16 @@ segment_create(POOL *pool, IO_HANDLE in, IO_HANDLE out, IO_HANDLE out1)
     struct io_segment_t *seg = pcalloc(pool, sizeof(struct io_segment_t));
 
     // Initialize segment
+    pthread_mutex_init(&seg->lock, NULL);
+
+    pthread_mutex_lock(&seg->lock);
     seg->pool = pool;
     seg->in = in;
     seg->out = out;
     seg->out1 = out1;
     seg->id = segment_counter++;
     seg->fn = segment_run;
+    pthread_mutex_unlock(&seg->lock);
 
     return (IO_SEGMENT)seg;
 }
@@ -362,7 +369,7 @@ void
 segment_start(IO_SEGMENT seg, enum stream_state_e *state)
 {
     struct io_segment_t *s = (struct io_segment_t *)seg;
-    //s->lock = &stream->lock;
+    s->state = state;
     pthread_create(&s->thread, NULL, s->fn, (void *)s);
 }
 
@@ -400,9 +407,9 @@ segment_is_running(IO_SEGMENT seg)
 {
     struct io_segment_t *s = (struct io_segment_t *)seg;
 
-    pthread_mutex_lock(s->lock);
+    pthread_mutex_lock(&s->lock);
     int ret = s->running;
-    pthread_mutex_unlock(s->lock);
+    pthread_mutex_unlock(&s->lock);
 
     return ret;
 }
@@ -412,9 +419,15 @@ segment_bytes(IO_SEGMENT seg)
 {
     struct io_segment_t *s = (struct io_segment_t *)seg;
 
-    pthread_mutex_lock(s->lock);
+    pthread_mutex_lock(&s->lock);
     size_t ret = s->bytes;
-    pthread_mutex_unlock(s->lock);
+    pthread_mutex_unlock(&s->lock);
 
     return ret;
+}
+
+void
+segment_set_log_level(char *level)
+{
+    bw_set_log_level_str(level);
 }

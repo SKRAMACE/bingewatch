@@ -11,6 +11,9 @@
 
 #include "simple-buffers.h"
 
+#define LOGEX_TAG "BW-STREAM"
+#include "bw-log.h"
+
 static pthread_mutex_t stream_lock = PTHREAD_MUTEX_INITIALIZER;
 
 // Unique identifier for streams
@@ -39,34 +42,14 @@ static void
 set_state(struct io_stream_t *stream, enum stream_state_e new_state)
 {
     if (new_state > STREAM_ERROR) {
-        printf("Invalid State (%d)\n", stream->state);
+        error("Invalid State (%d)", stream->state);
         new_state = STREAM_ERROR;
     }
 
-    printf("%s:%d - State change from %s to %s\n", __FUNCTION__, __LINE__,
+    trace("State change from %s to %s",
         STREAM_STATE_PRINT(stream->state), STREAM_STATE_PRINT(new_state));
 
     stream->state = new_state;
-}
-
-static void
-start_segments(struct io_stream_t *stream)
-{
-    int s = 0;
-    for (; s < stream->n_segment; s++) {
-        IO_SEGMENT seg = stream->segments[s];
-        segment_start(seg, &stream->state);
-    }
-}
-
-static void
-join_stream_segments(struct io_stream_t *stream)
-{
-    int s = 0;
-    for (; s < stream->n_segment; s++) {
-        IO_SEGMENT seg = stream->segments[s];
-        segment_join(seg);
-    }
 }
 
 static void
@@ -110,25 +93,6 @@ callback_error(void *arg)
     pthread_mutex_unlock(&stream->lock);
 }
 
-static void
-flush_stream_segments(struct io_stream_t *st)
-{
-    int s = 0;
-    while (s < st->n_segment) {
-        IO_SEGMENT seg = st->segments[s];
-
-        if (!segment_is_running(seg)) {
-            goto next;
-        }
-            
-        if (segment_bytes(seg) == 0) {
-            goto next;
-        }
-    next:
-        s++;
-    }
-}
-
 static void *
 main_state_machine(void *args)
 {
@@ -136,7 +100,13 @@ main_state_machine(void *args)
 
     set_state(st, STREAM_READY);
 
-    start_segments(st);
+    // Start segments
+    int s = 0;
+    for (; s < st->n_segment; s++) {
+        IO_SEGMENT seg = st->segments[s];
+        segment_start(seg, &st->state);
+    }
+
     set_state(st, STREAM_RUNNING);
 
     // Wait for
@@ -144,24 +114,81 @@ main_state_machine(void *args)
     //  2) A segment to signal error
     //  3) A shutdown from the main thread
     while (STREAM_RUNNING == st->state) {
-        usleep(500000);
+        usleep(1000);
     }
 
     // Wait for segments to complete final transactions
     if (STREAM_FINISHING == st->state) {
-        flush_stream_segments(st);
+        s = 0;
+        while (s < st->n_segment) {
+            IO_SEGMENT seg = st->segments[s];
+
+            if (!segment_is_running(seg)) {
+                goto next;
+            }
+            
+            if (segment_bytes(seg) == 0) {
+                goto next;
+            }
+        next:
+            s++;
+        }
     }
 
     set_state(st, STREAM_DONE);
 
-    join_stream_segments(st);
+    // Join stream segments
+    for (s = 0; s < st->n_segment; s++) {
+        IO_SEGMENT seg = st->segments[s];
+        segment_join(seg);
+    }
 
     pthread_exit(NULL);
 }
 
-static void
-add_stream(struct io_stream_t *stream)
+static struct io_stream_t *
+get_stream(IO_STREAM h)
 {
+    struct io_stream_t *ret = NULL;
+
+    pthread_mutex_lock(&stream_lock);
+    struct io_stream_t *s = streams;
+    while (s) {
+        if (s->id == h) {
+            ret = s;
+            break;
+        }
+        s = s->next;
+    }
+    pthread_mutex_unlock(&stream_lock);
+
+    return ret;
+}
+
+/*
+ * Create a new stream struct and add it to the stream list.  Return the stream handle.
+ */
+IO_STREAM
+new_stream()
+{
+    POOL *p = create_pool();
+    struct io_stream_t *stream = pcalloc(p, sizeof(struct io_stream_t));
+    pthread_mutex_init(&stream->lock, NULL);
+
+    // Init stream struct
+    pthread_mutex_lock(&stream->lock);
+
+    stream->state = STREAM_INIT;
+    stream->id = ++stream_counter;
+    stream->pool = p;
+    stream->segments = NULL;
+    stream->n_segment = 0;
+    stream->segment_len = 0;
+    stream->next = NULL;
+
+    pthread_mutex_unlock(&stream->lock);
+
+    // Add stream to list
     pthread_mutex_lock(&stream_lock);
     struct io_stream_t *s = streams;
     if (!s) {
@@ -173,39 +200,7 @@ add_stream(struct io_stream_t *stream)
         s->next = stream;
     }
     pthread_mutex_unlock(&stream_lock);
-}
 
-static struct io_stream_t *
-get_stream(IO_STREAM h)
-{
-    pthread_mutex_lock(&stream_lock);
-    struct io_stream_t *s = streams;
-    while (s) {
-        if (s->id == h) {
-            return s;
-        }
-        s = s->next;
-    }
-    pthread_mutex_unlock(&stream_lock);
-
-    return NULL;
-}
-
-/*
- * Create a new stream struct and add it to the stream list.  Return the stream handle.
- */
-IO_STREAM
-new_stream()
-{
-    POOL *p = create_pool();
-    struct io_stream_t *stream = pcalloc(p, sizeof(struct io_stream_t));
-    stream->state = STREAM_INIT;
-    stream->pool = p;
-    stream->segments = NULL;
-    pthread_mutex_init(&stream->lock, NULL);
-    stream->id = ++stream_counter;
-
-    add_stream(stream);
     return stream->id;
 }
 
@@ -224,32 +219,50 @@ add_segment(struct io_stream_t *st, IO_SEGMENT seg)
     pthread_mutex_unlock(&st->lock);
 }
 
+static void
+register_callbacks(struct io_stream_t *st, IO_SEGMENT seg)
+{
+    segment_register_callback_complete(seg, callback_complete, st);
+    segment_register_callback_error(seg, callback_error, st);
+}
+
+static void
+create_segment_1_1(struct io_stream_t *st, IO_HANDLE in, IO_HANDLE out)
+{
+    IO_SEGMENT s = segment_create_1_1(st->pool, in, out);
+    register_callbacks(st, s);
+    add_segment(st, s);
+}
+
+static void
+create_segment_1_2(struct io_stream_t *st, IO_HANDLE in, IO_HANDLE out, IO_HANDLE out1)
+{
+    IO_SEGMENT s = segment_create_1_2(st->pool, in, out, out1);
+    register_callbacks(st, s);
+    add_segment(st, s);
+}
+
 int
 io_stream_add_segment(IO_STREAM h, IO_HANDLE in, IO_HANDLE out, int flag)
 {
     // Get stream from handle
     struct io_stream_t *st = get_stream(h);
     if (!st) {
-        printf("ERROR: Stream not found\n");
+        error("Stream %d not found", h);
         return 1;
     }
 
-    IO_SEGMENT s;
     if (flag & BW_BUFFERED) {
         // Init Asynchronous Buffer IO Machine
         const IOM *rb = get_rb_machine();
         struct rbiom_args rb_vars = {0, 0, 0};
         IO_HANDLE buf = rb->create(&rb_vars);
 
-        s = segment_create_1_1(st->pool, in, buf);
-        add_segment(st, s);
-
-        s = segment_create_1_1(st->pool, buf, out);
-        add_segment(st, s);
+        create_segment_1_1(st, in, buf);
+        create_segment_1_1(st, buf, out);
 
     } else {
-        s = segment_create_1_1(st->pool, in, out);
-        add_segment(st, s);
+        create_segment_1_1(st, in, out);
     }
 
     return 0;
@@ -261,7 +274,7 @@ io_stream_add_tee_segment(IO_STREAM h, IO_HANDLE in, IO_HANDLE out, IO_HANDLE ou
     // Get stream from handle
     struct io_stream_t *st = get_stream(h);
     if (!st) {
-        printf("ERROR: Stream not found\n");
+        error("Stream %d not found", h);
         return 1;
     }
 
@@ -272,11 +285,12 @@ io_stream_add_tee_segment(IO_STREAM h, IO_HANDLE in, IO_HANDLE out, IO_HANDLE ou
         IO_HANDLE buf0 = rb->create(&rb_vars);
         IO_HANDLE buf1 = rb->create(&rb_vars);
 
-        segment_create_1_2(st->pool, in, buf0, buf1);
-        segment_create_1_1(st->pool, buf0, out);
-        segment_create_1_1(st->pool, buf1, out1);
+        create_segment_1_2(st, in, buf0, buf1);
+        create_segment_1_1(st, buf0, out);
+        create_segment_1_1(st, buf1, out1);
+
     } else {
-        segment_create_1_2(st->pool, in, out, out1);
+        create_segment_1_2(st, in, out, out1);
     }
 
     return 0;
@@ -288,7 +302,7 @@ start_stream(IO_STREAM h)
     // Get stream from handle
     struct io_stream_t *st = get_stream(h);
     if (!st) {
-        printf("ERROR: Stream not found\n");
+        error("Stream %d not found", h);
         return IO_ERROR;
     }
 
@@ -303,7 +317,7 @@ join_stream(IO_STREAM h)
     // Get stream from handle
     struct io_stream_t *st = get_stream(h);
     if (!st) {
-        printf("ERROR: Stream not found\n");
+        error("Stream %d not found", h);
         return;
     }
 
@@ -325,20 +339,18 @@ stop_stream_internal(struct io_stream_t *st)
 
         // send completion signal to the stream
         case STREAM_RUNNING:
-            printf("\tStream %d: Shutting down\n", st->id);
-            callback_complete(st);
+            set_state(st, STREAM_FINISHING);
             return;
 
         // stream is already set to stop
         case STREAM_FINISHING:
-            printf("\tStream %d: Waiting for data to empty\n", st->id);
             return;
 
         case STREAM_DONE:
             return;
 
         case STREAM_ERROR:
-            printf("\tStream %d: Error\n", st->id);
+            error("Stream %d experienced an error during STOP command", st->id);
             return;
 
         default:
@@ -356,7 +368,7 @@ stop_stream(IO_STREAM h)
     // Get stream from handle
     struct io_stream_t *st = get_stream(h);
     if (!st) {
-        printf("ERROR: Stream not found\n");
+        error("Stream %d not found", h);
         return IO_ERROR;
     }
 
@@ -409,4 +421,10 @@ stream_cleanup()
 
     streams = NULL;
     pthread_mutex_unlock(&stream_lock);
+}
+
+void
+stream_set_log_level(char *level)
+{
+    bw_set_log_level_str(level);
 }
