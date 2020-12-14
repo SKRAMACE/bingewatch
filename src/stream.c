@@ -49,7 +49,7 @@ set_state(struct io_stream_t *stream, enum stream_state_e new_state)
         new_state = STREAM_ERROR;
     }
 
-    trace("Stream %s state change from %s to %s",
+    trace("%s: state change from %s to %s",
         stream->name, STREAM_STATE_PRINT(stream->state), STREAM_STATE_PRINT(new_state));
 
     stream->state = new_state;
@@ -338,7 +338,7 @@ stop_stream_internal(struct io_stream_t *st)
         case STREAM_INIT:
         case STREAM_READY:
             // TODO: Use an init lock
-            // printf("\tStream %s: Still initializing\n", st->name);
+            // printf("%s: still initializing\n", st->name);
             usleep(1000);
             continue;
 
@@ -355,7 +355,7 @@ stop_stream_internal(struct io_stream_t *st)
             return;
 
         case STREAM_ERROR:
-            error("Stream %s experienced an error during STOP command", st->name);
+            error("%s: Error during STOP command", st->name);
             return;
 
         default:
