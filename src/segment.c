@@ -47,8 +47,7 @@ struct io_segment_t {
 
     // State machine
     enum stream_state_e *state;    // Pointer to stream state
-    char running;                  // This controls the main loop.  TODO: This should be handled by the actual state
-    char no_data;
+    char running;                  // This controls the main loop
 
     size_t bytes;
 
@@ -291,10 +290,8 @@ segment_run(void *arg)
         bytes = buflen;
 
         if (SEG_CTRL_TOP == read_from_source(src, seg, buf, &bytes)) {
-            seg->no_data = 1;
             continue;
         }
-        seg->no_data = 0;
 
         size_t src_bytes = bytes;
         if (SEG_CTRL_TOP == write_to_dest(dst, 0, seg, buf, &bytes)) {

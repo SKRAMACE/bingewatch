@@ -18,4 +18,7 @@ enum stream_state_e {
     STREAM_ERROR,
 };
 
+#define STREAM_IS_RUNNING(s) ((s > STREAM_INIT && s < STREAM_DONE) ? 1 : 0)
+#define STREAM_IS_PROCESSING(s) ((s == STREAM_RUNNING || s == STREAM_FINISHING) ? 1 : 0)
+
 #endif
