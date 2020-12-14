@@ -3,9 +3,6 @@
 
 #include "stream-state.h"
 
-#define SEG_NAME_LEN 128
-extern __thread char seg_name[SEG_NAME_LEN];
-
 typedef void (*seg_callback)(void*);
 typedef void* IO_SEGMENT;
 
@@ -21,6 +18,7 @@ void segment_destroy(IO_SEGMENT seg);
 int segment_is_running(IO_SEGMENT seg);
 size_t segment_bytes(IO_SEGMENT seg);
 
-void segment_set_log_level(char *level);
+void segment_set_group(IO_SEGMENT seg, char **group);
+void segment_set_name(IO_SEGMENT seg, char *name);
 
 #endif

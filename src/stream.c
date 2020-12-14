@@ -30,7 +30,7 @@ struct io_stream_t {
 
     // Data
     IO_STREAM id;               // Stream handle
-    char name[STREAM_NAME_LEN]; // Stream name
+    char *name;                 // Stream name
     POOL *pool;                 // Memory pool
 
     // Segments
@@ -189,7 +189,8 @@ new_stream()
     stream->segment_len = 0;
     stream->next = NULL;
 
-    snprintf(stream->name, STREAM_NAME_LEN-1, "%d", stream->id);
+    stream->name = pcalloc(p, STREAM_NAME_LEN);
+    snprintf(stream->name, STREAM_NAME_LEN-1, "stream%d", stream->id);
 
     pthread_mutex_unlock(&stream->lock);
 
@@ -214,6 +215,8 @@ add_segment(struct io_stream_t *st, IO_SEGMENT seg)
 {
     pthread_mutex_lock(&st->lock);
 
+    char **group = &st->name;
+    segment_set_group(seg, group);
     int i = st->n_segment++;
     if (i >= st->segment_len) {
         st->segment_len += 10;

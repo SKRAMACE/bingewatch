@@ -90,20 +90,3 @@ create_byte_counter_filter(void *alloc, const char *name, size_t bytes_per_sampl
     f->obj = limit;
     return f;
 }
-
-
-int
-dump_to_binfile(IO_FILTER_ARGS)
-{
-    IOF_DISABLED();
-    int ret = CALL_NEXT_FILTER();
-
-    static __thread FILE *outfile = NULL; 
-    if (!outfile) {
-        char filename[64];
-        snprintf(filename, 64, "test_data_%s", seg_name);
-        outfile = fopen(filename, "wb");
-    }
-    size_t bytes_written = fwrite(IO_FILTER_ARGS_BUF, sizeof(uint8_t), *IO_FILTER_ARGS_BYTES, outfile);
-    return ret;
-}

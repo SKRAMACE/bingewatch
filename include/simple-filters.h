@@ -12,7 +12,6 @@ enum iq_data_type_e {
 
 // Standard Filters
 int byte_counter(IO_FILTER_ARGS);
-int dump_to_binfile(IO_FILTER_ARGS);
 int byte_count_limiter(IO_FILTER_ARGS);
 
 struct io_filter_t *create_byte_count_limit_filter(void *alloc, const char *name, size_t byte_limit);

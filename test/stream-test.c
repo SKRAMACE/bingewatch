@@ -5,6 +5,7 @@
 #include <uuid/uuid.h>
 #include <memex.h>
 
+#include "logging.h"
 #include "simple-machines.h"
 #include "simple-buffers.h"
 #include "simple-filters.h"
@@ -287,6 +288,7 @@ int
 main(int nargs, char *argv[])
 {
     stream_set_log_level("trace");
+    segment_set_log_level("trace");
     fmt_rootdir("/tmp");
     printf("outdir: %s\n", rootdir);
     float *data;
