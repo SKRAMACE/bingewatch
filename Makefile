@@ -76,9 +76,16 @@ SRC = \
 	filter.c \
 	stream.c \
     segment.c \
+    bw-log.c \
 	$(MACHINES) \
 	$(FILTERS) \
 	$(SDR) \
+
+TEST = \
+	machine.c \
+	machine-mgmt.c \
+	filter.c \
+    bw-log.c \
 
 $(LIB): $(SRC)
 	$(CC) $(CFLAGS) $^ $(INC) $(LDFLAGS) $(LCFLAGS) -o $@
@@ -92,16 +99,19 @@ libbingewatch_uhd: $(LIB) uhd-machine.c
 %.o: %.c
 	$(CC) $(CFLAGS) $(INC) -I/usc/local/include -Werror -ggdb -c $^
 
-buffer-test: machine.c machine-mgmt.c filter.c $(BUF)
+buffer-test: $(TEST) $(BUF)
 	$(CC) $(TEST_CFLAGS) test/simple-buffer-test.c $^ $(INC) -o test/bin/simple-buffer-test $(TESTLIBS)
 
-file-test: machine.c machine-mgmt.c filter.c file-machine.c null-machine.c
+file-test: $(TEST) file-machine.c null-machine.c
 	$(CC) $(TEST_CFLAGS) test/file-test.c $^ $(INC) -o test/bin/file-test $(TESTLIBS)
 
-sock-test: machine.c machine-mgmt.c filter.c socket-machine.c
+stream-test: $(TEST) stream.c segment.c file-machine.c $(FILTERS) $(BUF)
+	$(CC) $(TEST_CFLAGS) test/stream-test.c $^ $(INC) -o test/bin/stream-test $(TESTLIBS)
+
+sock-test: $(TEST) socket-machine.c
 	$(CC) $(TEST_CFLAGS) test/sock-test.c $^ $(INC) -o test/bin/sock-test $(TESTLIBS)
 
-tests: buffer-test file-test
+tests: buffer-test file-test stream-test
 
 all: $(LIB) $(LIB)_soapy $(LIB)_uhd
 
