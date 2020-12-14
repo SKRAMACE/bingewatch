@@ -1,6 +1,8 @@
 #ifndef __SIMPLE_FILTERS_H__
 #define __SIMPLE_FILTERS_H__
 
+#include <filter.h>
+
 enum iq_data_type_e {
     IQ_UNSUPPORTED = -1,
     IQ_FC32,

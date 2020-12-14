@@ -16,25 +16,29 @@ static int
 byte_count_limiter(IO_FILTER_ARGS)
 {
     IOF_DISABLED();
-    int ret = CALL_NEXT_FILTER();
+    int ret = IO_ERROR;
 
-    if (ret != IO_SUCCESS) {
-        printf("NO SUCCESS\n");
-        return ret;
-    }
-
-    // If initialized improperly, just return status
-    if (!IO_FILTER_ARGS_FILTER->obj) {
-        return ret;
-    }
-
-    // Access internal struct
+    enum io_filter_direction dir = IO_FILTER_ARGS_FILTER->direction;
     struct generic_counter_t *limit = (struct generic_counter_t *)IO_FILTER_ARGS_FILTER->obj;
 
-    // Count bytes, and return COMPLETE if the limit is reached
-    limit->total += *IO_FILTER_ARGS_BYTES;
-    if (limit->total >= limit->limit) {
-        return IO_COMPLETE;
+    if (dir == IOF_READ) { 
+        int ret = CALL_NEXT_FILTER();
+        if (ret != IO_SUCCESS) {
+            return ret;
+        }
+    }
+
+    size_t bytes = *IO_FILTER_ARGS_BYTES;
+
+    if (limit->total + bytes <= limit->limit) {
+        limit->total += bytes;
+    } else {
+        *IO_FILTER_ARGS_BYTES = limit->limit - limit->total;
+        ret = IO_COMPLETE;
+    }
+
+    if (dir == IOF_WRITE) { 
+        int ret = CALL_NEXT_FILTER();
     }
 
     return ret;
