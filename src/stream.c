@@ -14,6 +14,8 @@
 #define LOGEX_TAG "BW-STREAM"
 #include "bw-log.h"
 
+#define STREAM_NAME_LEN 1024
+
 static pthread_mutex_t stream_lock = PTHREAD_MUTEX_INITIALIZER;
 
 // Unique identifier for streams
@@ -28,6 +30,7 @@ struct io_stream_t {
 
     // Data
     IO_STREAM id;               // Stream handle
+    char name[STREAM_NAME_LEN]; // Stream name
     POOL *pool;                 // Memory pool
 
     // Segments
@@ -46,8 +49,8 @@ set_state(struct io_stream_t *stream, enum stream_state_e new_state)
         new_state = STREAM_ERROR;
     }
 
-    trace("State change from %s to %s",
-        STREAM_STATE_PRINT(stream->state), STREAM_STATE_PRINT(new_state));
+    trace("Stream %s state change from %s to %s",
+        stream->name, STREAM_STATE_PRINT(stream->state), STREAM_STATE_PRINT(new_state));
 
     stream->state = new_state;
 }
@@ -185,6 +188,8 @@ new_stream()
     stream->n_segment = 0;
     stream->segment_len = 0;
     stream->next = NULL;
+
+    snprintf(stream->name, STREAM_NAME_LEN-1, "%d", stream->id);
 
     pthread_mutex_unlock(&stream->lock);
 
@@ -333,7 +338,7 @@ stop_stream_internal(struct io_stream_t *st)
         case STREAM_INIT:
         case STREAM_READY:
             // TODO: Use an init lock
-            // printf("\tStream %d: Still initializing\n", st->id);
+            // printf("\tStream %s: Still initializing\n", st->name);
             usleep(1000);
             continue;
 
@@ -350,7 +355,7 @@ stop_stream_internal(struct io_stream_t *st)
             return;
 
         case STREAM_ERROR:
-            error("Stream %d experienced an error during STOP command", st->id);
+            error("Stream %s experienced an error during STOP command", st->name);
             return;
 
         default:
@@ -421,6 +426,19 @@ stream_cleanup()
 
     streams = NULL;
     pthread_mutex_unlock(&stream_lock);
+}
+
+void
+stream_set_name(IO_STREAM h, const char *name)
+{
+    // Get stream from handle
+    struct io_stream_t *st = get_stream(h);
+    if (!st) {
+        error("Stream %d not found", h);
+        return;
+    }
+
+    snprintf(st->name, STREAM_NAME_LEN-1, "%s", name);
 }
 
 void
