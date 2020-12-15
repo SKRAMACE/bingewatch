@@ -188,68 +188,163 @@ machine_get_write_desc(IO_HANDLE h)
     return d->io_write;
 }
 
-int
-machine_desc_read(IO_HANDLE h, void *buf, size_t *len)
+void
+io_desc_set_state(struct machine_desc_t *d, struct io_desc *io, enum io_desc_state_e new_state)
 {
-    struct machine_desc_t *d = machine_get_desc(h);
-    if (!d || !d->io_read || !d->io_read->obj) {
-        *len = 0;
-        return IO_ERROR;
+    if (new_state > IO_DESC_ERROR) {
+        error("Invalid State (%d)", new_state);
+        new_state = IO_DESC_ERROR;
     }
 
-    if (d->io_read->disabled) {
-        *len = 0;
-        return IO_COMPLETE;
+    pthread_mutex_lock(&io->lock);
+    enum io_desc_state_e old_state = io->state;
+    io->state = new_state;
+    pthread_mutex_unlock(&io->lock);
+
+    machine_trace(d, io->handle, "state change from %s to %s",
+        IO_DESC_STATE_PRINT(old_state), IO_DESC_STATE_PRINT(new_state));
+}
+
+int
+machine_desc_read(IO_HANDLE h, void *buf, size_t *bytes)
+{
+    int ret = IO_ERROR;
+
+    struct machine_desc_t *d = machine_get_desc(h);
+    if (!d) {
+        error("Machine %d not found", h);
+        goto do_return;
+    }
+
+    if (!d->io_read) {
+        machine_error(d, h, "io read descriptor not found");
+        goto do_return;
+    }
+
+    if (!d->io_read->obj) {
+        machine_error(d, h, "io read filter object not found");
+        goto do_return;
+    }
+
+    switch (d->io_read->state) {
+    case IO_DESC_DISABLING:
+        machine_warn(d, h, "Disabled: Ignoring read requests until re-enabled");
+        io_desc_set_state(d, d->io_read, IO_DESC_DISABLED);
+        *bytes = 0;
+        ret = IO_SUCCESS;
+        goto do_return;
+
+    case IO_DESC_DISABLED:
+        *bytes = 0;
+        ret = IO_SUCCESS;
+        goto do_return;
+
+    case IO_DESC_STOPPED:
+        *bytes = 0;
+        ret = IO_COMPLETE;
+        goto do_return;
     }
 
     machine_desc_acquire(d);
     struct io_filter_t *f = (struct io_filter_t *)d->io_read->obj;
-    int status = f->call(f, buf, len, IO_NO_BLOCK, IO_DEFAULT_ALIGN);
+    ret = f->call(f, buf, bytes, IO_NO_BLOCK, IO_DEFAULT_ALIGN);
     machine_desc_release(d);
 
-    return status;
+do_return:
+    return ret;
 }
 
 int
-machine_desc_write(IO_HANDLE h, void *buf, size_t *len)
+machine_desc_write(IO_HANDLE h, void *buf, size_t *bytes)
 {
+    int ret = IO_ERROR;
+
     struct machine_desc_t *d = machine_get_desc(h);
-    if (!d || !d->io_write || !d->io_write->obj) {
-        *len = 0;
-        return IO_ERROR;
+    if (!d) {
+        error("Machine %d not found", h);
+        goto do_return;
     }
 
-    if (d->io_write->disabled) {
-        *len = 0;
-        return IO_COMPLETE;
+    if (!d->io_write) {
+        machine_error(d, h, "io write descriptor not found");
+        goto do_return;
+    }
+
+    if (!d->io_write->obj) {
+        machine_error(d, h, "io write filter object not found");
+        goto do_return;
+    }
+
+    switch (d->io_write->state) {
+    case IO_DESC_DISABLING:
+        machine_warn(d, h, "Disabled: Ignoring write requests until re-enabled");
+        io_desc_set_state(d, d->io_write, IO_DESC_DISABLED);
+        *bytes = 0;
+        ret = IO_SUCCESS;
+        goto do_return;
+
+    case IO_DESC_DISABLED:
+        *bytes = 0;
+        ret = IO_SUCCESS;
+        goto do_return;
+
+    case IO_DESC_STOPPED:
+        *bytes = 0;
+        ret = IO_COMPLETE;
+        goto do_return;
     }
 
     machine_desc_acquire(d);
     struct io_filter_t *f = (struct io_filter_t *)d->io_write->obj;
-    int status = f->call(f, buf, len, IO_NO_BLOCK, IO_DEFAULT_ALIGN);
+    ret = f->call(f, buf, bytes, IO_NO_BLOCK, IO_DEFAULT_ALIGN);
     machine_desc_release(d);
 
-    return status;
+do_return:
+    return ret;
 }
 
 void
 machine_disable_read(IO_HANDLE h)
 {
     struct machine_desc_t *d = machine_get_desc(h);
-    if (d) {
-        d->io_read->disabled = 1;
+    if (!d) {
+        error("Machine %d not found", h);
+    } else if (!d->io_write) {
+        machine_error(d, h, "io read descriptor not found");
+    } else {
+        io_desc_set_state(d, d->io_read, IO_DESC_DISABLING);
     }
-    
 }
 
 void
 machine_disable_write(IO_HANDLE h)
 {
     struct machine_desc_t *d = machine_get_desc(h);
-    if (d) {
-        d->io_write->disabled = 1;
+    if (!d) {
+        error("Machine %d not found", h);
+    } else if (!d->io_write) {
+        machine_error(d, h, "io write descriptor not found");
+    } else {
+        io_desc_set_state(d, d->io_write, IO_DESC_DISABLING);
     }
-    
+}
+
+void
+machine_stop(IO_HANDLE h)
+{
+    struct machine_desc_t *d = machine_get_desc(h);
+    if (!d) {
+        error("Machine %d not found", h);
+        return;
+    }
+
+    if (d->io_write) {
+        io_desc_set_state(d, d->io_write, IO_DESC_DISABLING);
+    }
+
+    if (d->io_read) {
+        io_desc_set_state(d, d->io_read, IO_DESC_DISABLING);
+    }
 }
 
 IO_HANDLE
@@ -264,6 +359,7 @@ machine_desc_init(POOL *p, IOM *machine, IO_DESC *d)
         return IO_ERROR;
     }
     d->io_read->alloc = p;
+    pthread_mutex_init(&d->io_read->lock, NULL);
 
     d->io_write = (struct io_desc *)pcalloc(p, sizeof(struct io_desc));
     if (!d->io_write) {
@@ -271,6 +367,7 @@ machine_desc_init(POOL *p, IOM *machine, IO_DESC *d)
         return IO_ERROR;
     }
     d->io_write->alloc = p;
+    pthread_mutex_init(&d->io_write->lock, NULL);
 
     // Initialize handle to 0 (it's set by machine_register_desc()
     d->handle = 0;

@@ -4,6 +4,7 @@
 #include "machine.h"
 #include "segment.h"
 #include "stream-state.h"
+#include "stream-metrics.h"
 
 #define LOGEX_TAG "BW-SEG"
 #include "bw-log.h"
@@ -16,8 +17,10 @@ static char *group = "";
 #define seg_error(s, x, ...) error("%s%s%s: " x, *s->group, s->gsep, s->name, ##__VA_ARGS__)
 #define seg_info(s, x, ...) info("%s%s%s: " x, *s->group, s->gsep, s->name, ##__VA_ARGS__)
 #define seg_trace(s, x, ...) trace("%s%s%s: " x, *s->group, s->gsep, s->name, ##__VA_ARGS__)
+#define seg_debug(s, x, ...) debug("%s%s%s: " x, *s->group, s->gsep, s->name, ##__VA_ARGS__)
 
 #define SEGMENT_COMPLETE(s) s->complete.fn(s->complete.arg)
+
 #define SEGMENT_ERROR(s) s->error.fn(s->error.arg)
 
 #define DEFAULT_BUF_LEN 10*MB
@@ -48,8 +51,9 @@ struct io_segment_t {
     // State machine
     enum stream_state_e *state;    // Pointer to stream state
     char running;                  // This controls the main loop
+    char do_complete;              // This controls the main loop
 
-    size_t bytes;
+    struct stream_metric_t metric;
 
     // Seg Management
     int id;                     // Numeric value for identification
@@ -66,6 +70,16 @@ struct io_segment_t {
     IO_HANDLE out;                 // Output IOM
     IO_HANDLE out1;                // Output IOM
 };
+
+static void
+segment_print_metrics(struct io_segment_t *s)
+{
+    double response_rate = (double)s->metric.response_count / (double)s->metric.request_count;
+    seg_trace(s, "Metric: %zd requests (%0.2f %%)",
+        s->metric.request_count, response_rate * 100);
+    seg_trace(s, "Metric: %zd received (%zd bytes)",
+        s->metric.received_count, s->metric.received_bytes);
+}
 
 /*
  * Stop IO Machines and set running flag to false
@@ -89,7 +103,9 @@ stop_segment(struct io_segment_t *s)
         dst1->stop(s->out1);
     }
 
+    seg_trace(s, "Stop command issued");
     s->running = 0;
+    s->do_complete = 0;
 }
 
 
@@ -138,38 +154,23 @@ calculate_metrics(struct benchmark_t *bm, size_t bytes)
 }
 */
 
-static inline enum iostream_seg_ctrl_e
+static inline void
 read_from_source(const IOM *src, struct io_segment_t *seg, char *buf, size_t *bytes)
 {
     enum io_status status = src->read(seg->in, buf, bytes);
-    switch (status) {
-    case IO_SUCCESS:
-        break;
-    case IO_COMPLETE:
+
+    if (IO_COMPLETE == status) {
         seg_info(seg, "Read complete");
-        SEGMENT_COMPLETE(seg);
-        stop_segment(seg);
-        break;
-    default:
+        seg->do_complete = 1;
+    } else if (IO_SUCCESS != status) {
         seg_error(seg, "Read error");
         SEGMENT_ERROR(seg);
         stop_segment(seg);
-        return SEG_CTRL_TOP;
+        *bytes = 0;
     }
-
-    if (0 == *bytes) {
-        return SEG_CTRL_TOP;
-    }
-
-    // Calculate input metrics
-    //pthread_mutex_lock(&seg->lock);
-    //calculate_metrics(&seg->in_stats, *bytes);
-    //pthread_mutex_unlock(&seg->lock);
-
-    return SEG_CTRL_PROCEED;
 }
 
-static inline enum iostream_seg_ctrl_e
+static void
 write_to_dest(const IOM *dst, int out_index, struct io_segment_t *seg, char *buf, size_t *bytes)
 {
     // Set output index
@@ -185,7 +186,8 @@ write_to_dest(const IOM *dst, int out_index, struct io_segment_t *seg, char *buf
         seg_error(seg, "Invalid output index (%d)", out_index);
         SEGMENT_ERROR(seg);
         stop_segment(seg);
-        return SEG_CTRL_TOP;
+        *bytes = 0;
+        return;
     }
 
     // Write to dest 
@@ -196,26 +198,16 @@ write_to_dest(const IOM *dst, int out_index, struct io_segment_t *seg, char *buf
     while (remaining) {
         size_t _bytes = remaining;
         enum io_status status = dst->write(out, ptr, &_bytes);
-        switch (status) {
-        case IO_SUCCESS:
-            break;
-        case IO_COMPLETE:
+        if (IO_COMPLETE == status) {
             seg_info(seg, "Write complete");
-            SEGMENT_COMPLETE(seg);
-            stop_segment(seg);
+            seg->do_complete = 1;
             break;
-        default:
+        } else if (IO_SUCCESS != status) {
             seg_error(seg, "Write error");
             SEGMENT_ERROR(seg);
             stop_segment(seg);
-            return SEG_CTRL_TOP;
-        }
-
-        if (_bytes > remaining) {
-            seg_error(seg, "Counter error");
-            SEGMENT_ERROR(seg);
-            stop_segment(seg);
-            return SEG_CTRL_TOP;
+            wr_bytes = 0;
+            break;
         }
 
         remaining -= _bytes;
@@ -223,14 +215,8 @@ write_to_dest(const IOM *dst, int out_index, struct io_segment_t *seg, char *buf
         wr_bytes += _bytes;
     }
 
-    // Calculate output metrics
-    //pthread_mutex_lock(&seg->lock);
-    //calculate_metrics(out_stats, wr_bytes);
-    //pthread_mutex_unlock(&seg->lock);
-
-    return SEG_CTRL_PROCEED;
+    *bytes = wr_bytes;
 }
-
 
 void *
 segment_run(void *arg)
@@ -269,44 +255,61 @@ segment_run(void *arg)
 
     seg->running = 1;
     while (seg->running) {
-        enum iostream_seg_ctrl_e ctrl;
-        size_t bytes = 0;
-
-        /* State Machine */
-        switch (*seg->state) {
-        case STREAM_READY:
+        enum stream_state_e state = *seg->state;
+        if (STREAM_READY == state) {
             continue;
-        case STREAM_RUNNING:
-        case STREAM_FINISHING:
-            break;
-        case STREAM_DONE:
-        case STREAM_INIT:
-        case STREAM_ERROR:
-        default:
+        }
+
+        if (seg->do_complete) {
+            SEGMENT_COMPLETE(seg);
+            stop_segment(seg);
+            continue;
+        }
+
+        if (!STREAM_IS_RUNNING(state)) {
+            seg_trace(seg, "Stream stopped");
             seg->running = 0;
             continue;
         }
 
-        bytes = buflen;
+        seg->metric.request_count++;
+        size_t bytes = buflen;
+        read_from_source(src, seg, buf, &bytes);
 
-        if (SEG_CTRL_TOP == read_from_source(src, seg, buf, &bytes)) {
+        if (bytes == 0) {
+            /*
+            if (*seg->state == STREAM_FINISHING) {
+                seg_trace(seg, "Source empty");
+                seg->running = 0;
+            }
+            */
             continue;
+        }
+        seg->metric.response_count++;
+
+        seg->metric.received_bytes += bytes;
+        seg->metric.received_count++;
+
+        if (bytes != buflen) {
+            seg->metric.short_bytes += bytes;
+            seg->metric.short_count++;
         }
 
         size_t src_bytes = bytes;
-        if (SEG_CTRL_TOP == write_to_dest(dst, 0, seg, buf, &bytes)) {
+        write_to_dest(dst, 0, seg, buf, &bytes);
+        if (bytes == 0) {
             continue;
+        } else if (bytes != src_bytes) {
+            error("Partial write");
         }
 
-        if (0 == seg->out1) {
-            continue;
-        }
-
-        bytes = src_bytes;
-        if (SEG_CTRL_TOP == write_to_dest(dst, 1, seg, buf, &bytes)) {
-            continue;
+        if (seg->out1 > 0) {
+            bytes = src_bytes;
+            write_to_dest(dst, 1, seg, buf, &bytes);
         }
     }
+
+    segment_print_metrics(seg);
 
     pfree(pool);
     cleanup_segment(seg);
@@ -412,18 +415,6 @@ segment_is_running(IO_SEGMENT seg)
 
     pthread_mutex_lock(&s->lock);
     int ret = s->running;
-    pthread_mutex_unlock(&s->lock);
-
-    return ret;
-}
-
-size_t
-segment_bytes(IO_SEGMENT seg)
-{
-    struct io_segment_t *s = (struct io_segment_t *)seg;
-
-    pthread_mutex_lock(&s->lock);
-    size_t ret = s->bytes;
     pthread_mutex_unlock(&s->lock);
 
     return ret;

@@ -127,14 +127,9 @@ main_state_machine(void *args)
             IO_SEGMENT seg = st->segments[s];
 
             if (!segment_is_running(seg)) {
-                goto next;
+                trace("%s: Segment %d not running", st->name, s);
+                s++;
             }
-            
-            if (segment_bytes(seg) == 0) {
-                goto next;
-            }
-        next:
-            s++;
         }
     }
 

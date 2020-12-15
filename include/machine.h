@@ -63,13 +63,31 @@ typedef struct bw_machine {
     void *obj;     
 } IOM;
 
+#define IO_DESC_STATE_PRINT(s) (\
+(s == IO_DESC_ENABLED) ? "ENABLED" :(\
+(s == IO_DESC_DISABLING) ? "DISABLING" :(\
+(s == IO_DESC_DISABLED) ? "DISABLED" :(\
+(s == IO_DESC_STOPPED) ? "STOPPED" :(\
+(s == IO_DESC_ERROR) ? "ERROR" : "UNKNOWN STATE")))))
+
+enum io_desc_state_e {
+    IO_DESC_ENABLED,
+    IO_DESC_DISABLING,
+    IO_DESC_DISABLED,
+    IO_DESC_STOPPED,
+    IO_DESC_ERROR,
+};
+
 // Generic struct for describing a machine input or output
 struct io_desc {
     // Unique ID for descriptor
     const IO_HANDLE handle;
 
-    // Indicates that the descriptor was stopped
-    char disabled;
+    // Descriptor state
+    enum io_desc_state_e state;
+
+    // Mutex lock for this descriptor
+    pthread_mutex_t lock;
 
     // Used for Implementation-dependent memory allocation
     void *alloc;
@@ -94,6 +112,8 @@ typedef struct machine_desc_t {
     void *_impl;
 } IO_DESC;
 
+void io_desc_set_state(struct machine_desc_t *d, struct io_desc *io, enum io_desc_state_e new_state);
+
 void machine_desc_acquire(IO_DESC *desc);
 void machine_desc_release(IO_DESC *desc);
 void machine_lock(IO_HANDLE h);
@@ -104,10 +124,11 @@ struct io_desc *machine_get_write_desc(IO_HANDLE h);
 void machine_register_desc(struct machine_desc_t *addme, IO_HANDLE *handle);
 struct machine_desc_t *machine_get_desc(IO_HANDLE h);
 void machine_destroy_desc(IO_HANDLE h);
-int machine_desc_read(IO_HANDLE h, void *buf, size_t *len);
-int machine_desc_write(IO_HANDLE h, void *buf, size_t *len);
+int machine_desc_read(IO_HANDLE h, void *buf, size_t *bytes);
+int machine_desc_write(IO_HANDLE h, void *buf, size_t *bytes);
 void machine_disable_write(IO_HANDLE h);
 void machine_disable_read(IO_HANDLE h);
+void machine_stop(IO_HANDLE h);
 
 /***** Using Machines *****/
 IOM *machine_register(const char *name);

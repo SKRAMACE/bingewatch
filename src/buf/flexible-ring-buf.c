@@ -29,6 +29,7 @@ struct ring_t {
 
     size_t size;         // Total capacity in all blocks (in bytes)
     size_t bytes;        // Total data written in all blocks (in bytes)
+    int flush;
     struct __block_t *wp;  // Pointer to next write (empty) block
     struct __block_t *rp;  // Pointer to next read (filled) block
     pthread_mutex_t wlock; // Mutex lock for writing to this ring
@@ -45,7 +46,8 @@ buf_read(IO_FILTER_ARGS)
     IO_HANDLE *handle = (IO_HANDLE *)IO_FILTER_ARGS_FILTER->obj;
 
     // Get ring from handle
-    struct ring_t *ring = (struct ring_t *)machine_get_desc(*handle);
+    struct machine_desc_t *d = machine_get_desc(*handle);
+    struct ring_t *ring = (struct ring_t *)d;
     if (!ring) {
         *IO_FILTER_ARGS_BYTES = 0;
         return IO_ERROR;
@@ -57,6 +59,7 @@ buf_read(IO_FILTER_ARGS)
 
     // Initialize read vars
     pthread_mutex_t *lock = &ring->_b.lock;
+    int flush = ring->flush;
     size_t bytes_read = 0;
     size_t remaining = *IO_FILTER_ARGS_BYTES;
 
@@ -107,6 +110,12 @@ buf_read(IO_FILTER_ARGS)
     pthread_mutex_unlock(&ring->rlock);
 
     *IO_FILTER_ARGS_BYTES = bytes_read;
+
+    if (flush && bytes_read == 0) {
+        io_desc_set_state(d, d->io_read, IO_DESC_DISABLING);
+        return IO_COMPLETE;
+    }
+
     return IO_SUCCESS;
 }
 
@@ -328,6 +337,27 @@ create_buffer(void *arg)
     return h;
 }
 
+static void
+stop_buffer(IO_HANDLE h)
+{
+    struct machine_desc_t *d = machine_get_desc(h);
+    if (!d) {
+        error("Machine %d not found", h);
+        return;
+    }
+
+    // Disable writing
+    if (d->io_write) {
+        io_desc_set_state(d, d->io_write, IO_DESC_DISABLING);
+    }
+
+    // Allow reading until the buffer is empty
+    if (d->io_read) {
+        struct ring_t *r = (struct ring_t *)d;
+        r->flush = 1;
+    }
+}
+
 void
 rbiom_update_defaults(struct rbiom_args *rb)
 {
@@ -352,6 +382,7 @@ get_rb_machine()
 
         // Local Functions
         machine->create = create_buffer;
+        machine->stop = stop_buffer;
         machine->destroy = destroy_rb_machine;
 
         ring_buffer_machine = machine;

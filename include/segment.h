@@ -16,7 +16,6 @@ void segment_start(IO_SEGMENT seg, enum stream_state_e *state);
 void segment_join(IO_SEGMENT seg);
 void segment_destroy(IO_SEGMENT seg);
 int segment_is_running(IO_SEGMENT seg);
-size_t segment_bytes(IO_SEGMENT seg);
 
 void segment_set_group(IO_SEGMENT seg, char **group);
 void segment_set_name(IO_SEGMENT seg, char *name);

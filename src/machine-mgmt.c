@@ -32,7 +32,6 @@ DECLARE_IO_NOIMPL(write)
 DECLARE_NOIMPL(destroy)
 DECLARE_NOIMPL(lock)
 DECLARE_NOIMPL(unlock)
-DECLARE_NOIMPL(stop)
 
 // Map handles to machine pointers
 #define MACHINE_CHUNK 0x100
@@ -111,7 +110,7 @@ machine_register(const char *name)
     machine->create  = CREATE_NOIMPL;
     machine->read    = machine_desc_read;
     machine->write   = machine_desc_write;
-    machine->stop    = NOIMPL(stop);
+    machine->stop    = machine_stop;
     machine->destroy = NOIMPL(destroy);
 
     machine->lock    = machine_lock;
