@@ -5,21 +5,24 @@
 
 #include "machine.h"
 
+#define LOGEX_TAG "BW-MACHINE"
+#include "bw-log.h"
+
 #define DECLARE_CREATE_NOIMPL \
 static IO_HANDLE create_noimpl(void *arg) { \
-    fprintf(stderr, "ERROR: Machine function \"create\" was not implemented\n"); \
+    warn("Function \"create\" not implemented"); \
 }
 #define CREATE_NOIMPL create_noimpl
 
 #define DECLARE_NOIMPL(name) \
 static void name##_noimpl(IO_HANDLE h) { \
-    fprintf(stderr, "ERROR: Machine function \"" #name "\" was not implemented\n"); \
+    warn("Function \"" #name "\" not implemented"); \
 }
 #define NOIMPL(name) name##_noimpl
 
 #define DECLARE_IO_NOIMPL(name) \
 static int name##_noimpl(IO_HANDLE h, void *buf, size_t *len) { \
-    fprintf(stderr, "ERROR: Machine function \"" #name "\" was not implemented\n"); \
+    warn("Function \"" #name "\" not implemented"); \
 }
 #define IO_NOIMPL(name) name##_noimpl
 
@@ -91,7 +94,7 @@ machine_register(const char *name)
     // Check for name
     IOM *machine = get_machine(name);
     if (machine) {
-        printf("ERROR: io machine \"%s\" already exists.", name);
+        error("io machine \"%s\" already exists.", name);
         return NULL;
     }
 
@@ -182,4 +185,10 @@ machine_cleanup()
         }
         hm->machine->destroy(hm->handle);
     }
+}
+
+void
+machine_mgmt_set_log_level(char *level)
+{
+    bw_set_log_level_str(level);
 }

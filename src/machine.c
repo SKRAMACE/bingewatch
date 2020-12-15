@@ -6,6 +6,14 @@
 #include "machine.h"
 #include "filter.h"
 
+#define LOGEX_TAG "BW-MACHINE"
+#include "logging.h"
+#include "bw-log.h"
+
+#define machine_error(d, h, x, ...) error("%s %d: " x, d->machine->name, h, ##__VA_ARGS__)
+#define machine_warn(d, h, x, ...) warn("%s %d: " x, d->machine->name, h, ##__VA_ARGS__)
+#define machine_trace(d, h, x, ...) trace("%s %d: " x, d->machine->name, h, ##__VA_ARGS__)
+
 struct machine_desc_t *machine_descriptors = NULL;
 static pthread_mutex_t machine_desc_list_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -269,4 +277,11 @@ machine_desc_init(POOL *p, IOM *machine, IO_DESC *d)
     d->machine = machine;
 
     return IO_SUCCESS;
+}
+
+void
+machine_set_log_level(char *level)
+{
+    machine_mgmt_set_log_level(level);
+    bw_set_log_level_str(level);
 }

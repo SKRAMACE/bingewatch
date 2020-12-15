@@ -9,6 +9,10 @@
 #include "block-list-buffer.h"
 #include "simple-buffers.h"
 
+#define LOGEX_TAG "RING-BUF"
+#include "logging.h"
+#include "bw-log.h"
+
 #define DEFAULT_BUF_BYTES 100*MB
 #define DEFAULT_BLK_BYTES   10*MB
 #define DEFAULT_ALIGN 4
@@ -383,4 +387,10 @@ rb_get_bytes(IO_HANDLE h)
         return 0;
     }
     return ring->bytes;
+}
+
+void
+rb_set_log_level(char *level)
+{
+    bw_set_log_level_str(level);
 }
