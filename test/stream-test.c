@@ -246,7 +246,7 @@ run_byte_count_stream_test(void *data, size_t bytes)
 
     // Create byte counter
     POOL *p = create_pool();
-    struct io_filter_t *limiter = create_byte_count_limit_filter(p, "limiter", limit_bytes);
+    IO_FILTER *limiter = create_byte_count_limit_filter(p, "limiter", limit_bytes);
     add_write_filter(buf1, limiter);
 
     // Create stream
@@ -283,12 +283,9 @@ do_return:
     return ret;
 }
 
-
 int
 main(int nargs, char *argv[])
 {
-    stream_set_log_level("trace");
-    segment_set_log_level("trace");
     fmt_rootdir("/tmp");
     printf("outdir: %s\n", rootdir);
     float *data;
