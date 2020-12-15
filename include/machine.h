@@ -32,6 +32,7 @@ typedef IO_HANDLE (*io_creator)(void*);
 typedef void (*io_handle)(IO_HANDLE);
 typedef int (*io_rw)(IO_HANDLE, void*, size_t*);
 typedef struct io_desc *(*io_getter)(IO_HANDLE);
+typedef size_t (*io_uint_get)(IO_HANDLE);
 
 
 typedef struct bw_machine {
@@ -45,6 +46,7 @@ typedef struct bw_machine {
     io_getter get_write_desc;
     io_rw read;
     io_rw write;
+    io_uint_get get_bytes;
 
     // String to identify this io machine
     char *name;
@@ -129,6 +131,7 @@ int machine_desc_write(IO_HANDLE h, void *buf, size_t *bytes);
 void machine_disable_write(IO_HANDLE h);
 void machine_disable_read(IO_HANDLE h);
 void machine_stop(IO_HANDLE h);
+size_t machine_get_bytes(IO_HANDLE h);
 
 /***** Using Machines *****/
 IOM *machine_register(const char *name);

@@ -282,6 +282,12 @@ destroy_fifo(IO_HANDLE h)
     machine_destroy_desc(h);
 }
 
+static size_t
+get_bytes(IO_HANDLE h)
+{
+    return 0;
+}
+
 const IOM*
 get_fifo_machine()
 {
@@ -294,6 +300,7 @@ get_fifo_machine()
         machine->stop = machine_disable_read;
         machine->read = machine_desc_read;
         machine->write = machine_desc_write;
+        machine->get_bytes = get_bytes;
         machine->obj = NULL;
 
         _fifo_machine = machine;

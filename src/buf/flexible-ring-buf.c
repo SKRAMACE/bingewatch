@@ -370,6 +370,16 @@ rbiom_update_defaults(struct rbiom_args *rb)
     pthread_mutex_unlock(&rb_machine_lock);
 }
 
+size_t
+rb_get_bytes(IO_HANDLE h)
+{
+    struct ring_t *ring = (struct ring_t *)machine_get_desc(h);
+    if (!ring) {
+        return 0;
+    }
+    return ring->bytes;
+}
+
 /*
  * Mechanism for registering and accessing this io machine
  */
@@ -384,6 +394,7 @@ get_rb_machine()
         machine->create = create_buffer;
         machine->stop = stop_buffer;
         machine->destroy = destroy_rb_machine;
+        machine->get_bytes = rb_get_bytes;
 
         ring_buffer_machine = machine;
     }
@@ -408,16 +419,6 @@ rb_get_size(IO_HANDLE h)
         return 0;
     }
     return ring->size;
-}
-
-size_t
-rb_get_bytes(IO_HANDLE h)
-{
-    struct ring_t *ring = (struct ring_t *)machine_get_desc(h);
-    if (!ring) {
-        return 0;
-    }
-    return ring->bytes;
 }
 
 void

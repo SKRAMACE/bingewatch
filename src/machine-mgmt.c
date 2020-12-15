@@ -110,6 +110,7 @@ machine_register(const char *name)
     machine->create  = CREATE_NOIMPL;
     machine->read    = machine_desc_read;
     machine->write   = machine_desc_write;
+    machine->get_bytes = machine_get_bytes;
     machine->stop    = machine_stop;
     machine->destroy = NOIMPL(destroy);
 

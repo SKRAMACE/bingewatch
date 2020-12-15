@@ -376,6 +376,19 @@ machine_desc_init(POOL *p, IOM *machine, IO_DESC *d)
     return IO_SUCCESS;
 }
 
+size_t
+machine_get_bytes(IO_HANDLE h)
+{
+    struct machine_desc_t *d = machine_get_desc(h);
+    if (!d) {
+        error("Machine %d not found", h);
+    }
+
+    error("get_bytes() not implemented for %s: returning 0", d->machine->name);
+
+    return 0;
+}
+
 void
 machine_set_log_level(char *level)
 {

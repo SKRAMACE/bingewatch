@@ -543,6 +543,12 @@ dir_rotate_fn(IO_FILTER_ARGS)
     ret = CALL_NEXT_FILTER();
 }
 
+static size_t
+get_bytes(IO_HANDLE h)
+{
+    return 0;
+}
+
 const IOM*
 get_file_machine()
 {
@@ -555,6 +561,7 @@ get_file_machine()
         machine->stop = machine_disable_read;
         machine->read = machine_desc_read;
         machine->write = machine_desc_write;
+        machine->get_bytes = get_bytes;
         machine->obj = NULL;
 
         _file_machine = machine;
