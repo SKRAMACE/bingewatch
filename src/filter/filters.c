@@ -72,7 +72,7 @@ byte_counter(IO_FILTER_ARGS)
     // Count bytes, and return COMPLETE if the limit is reached
     limit->total += *IO_FILTER_ARGS_BYTES;
     if (limit->total >= limit->limit) {
-        printf("%zu MB Processed\n", limit->total/(1024*1024));
+        printf("%zu bytes\n", limit->total);
         limit->limit += limit->period;
     }
 
