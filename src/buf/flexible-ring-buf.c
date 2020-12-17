@@ -370,14 +370,16 @@ rbiom_update_defaults(struct rbiom_args *rb)
     pthread_mutex_unlock(&rb_machine_lock);
 }
 
-size_t
-rb_get_bytes(IO_HANDLE h)
+static void *
+get_metrics(IO_HANDLE h)
 {
     struct ring_t *ring = (struct ring_t *)machine_get_desc(h);
     if (!ring) {
-        return 0;
+        error("Machine %d not found", h);
+        return NULL;
     }
-    return ring->bytes;
+
+    return ring->_b.metrics;
 }
 
 /*
@@ -394,7 +396,7 @@ get_rb_machine()
         machine->create = create_buffer;
         machine->stop = stop_buffer;
         machine->destroy = destroy_rb_machine;
-        machine->get_bytes = rb_get_bytes;
+        machine->metrics = get_metrics;
 
         ring_buffer_machine = machine;
     }

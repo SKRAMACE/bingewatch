@@ -73,6 +73,7 @@ FILTERS = \
 SRC = \
 	machine.c \
 	machine-mgmt.c \
+	machine-metrics.c \
 	filter.c \
 	stream.c \
     segment.c \
@@ -84,6 +85,7 @@ SRC = \
 TEST = \
 	machine.c \
 	machine-mgmt.c \
+	machine-metrics.c \
 	filter.c \
     bw-log.c \
 

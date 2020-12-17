@@ -3,6 +3,7 @@
 
 #include <pthread.h>
 #include <memex.h>
+#include <sys/time.h>
 
 // Data Size Constants
 #ifndef KB
@@ -32,8 +33,7 @@ typedef IO_HANDLE (*io_creator)(void*);
 typedef void (*io_handle)(IO_HANDLE);
 typedef int (*io_rw)(IO_HANDLE, void*, size_t*);
 typedef struct io_desc *(*io_getter)(IO_HANDLE);
-typedef size_t (*io_uint_get)(IO_HANDLE);
-
+typedef void *(*io_meta)(IO_HANDLE);
 
 typedef struct bw_machine {
     // Interface functions
@@ -46,17 +46,13 @@ typedef struct bw_machine {
     io_getter get_write_desc;
     io_rw read;
     io_rw write;
-    io_uint_get get_bytes;
+    io_meta metrics;
 
     // String to identify this io machine
     char *name;
 
     // Used for Implementation-dependent memory allocation
     void *alloc;
-
-    // Buffer size recommendation: Used by implementor for optimal buffer allocation
-    size_t buf_read_size_rec;
-    size_t buf_write_size_rec;
 
     // Timeout metric
     size_t timeout;
@@ -80,6 +76,33 @@ enum io_desc_state_e {
     IO_DESC_ERROR,
 };
 
+#define METRIC_HIST 60
+typedef void (*metrics_call)(void*, size_t);
+typedef struct io_metrics_data_t {
+    pthread_mutex_t lock;
+    metrics_call fn;
+    int _timer_signal;
+
+    size_t total_bytes;
+    struct timeval t_start;
+    struct timeval t_stop;
+
+    int time_i;
+    size_t bytes_last;
+    size_t bytes[METRIC_HIST];
+    struct timeval time[METRIC_HIST];
+
+    double rate_1;
+    double rate_10;
+
+    void *__impl;
+} IO_METRICS;
+
+struct io_metrics_t {
+    IO_METRICS in;
+    IO_METRICS out;
+};
+
 // Generic struct for describing a machine input or output
 struct io_desc {
     // Unique ID for descriptor
@@ -90,6 +113,9 @@ struct io_desc {
 
     // Mutex lock for this descriptor
     pthread_mutex_t lock;
+
+    // Data packet size
+    size_t size;
 
     // Used for Implementation-dependent memory allocation
     void *alloc;
@@ -108,6 +134,7 @@ typedef struct machine_desc_t {
     pthread_mutex_t lock;     // Mutex lock for this machine
     struct io_desc *io_read;  // IO read descriptor for this machine
     struct io_desc *io_write; // IO write descriptor for this machine
+    struct io_metrics_t *metrics;
     void *next;
 
     // Implementation-specific 
@@ -122,6 +149,13 @@ void machine_lock(IO_HANDLE h);
 void machine_unlock(IO_HANDLE h);
 struct io_desc *machine_get_read_desc(IO_HANDLE h);
 struct io_desc *machine_get_write_desc(IO_HANDLE h);
+void machine_desc_set_read_size(IO_HANDLE h, size_t len);
+void machine_desc_set_write_size(IO_HANDLE h, size_t len);
+void machine_metrics_enable();
+
+void machine_metrics_timer_start(size_t ms);
+void machine_metrics_timer_stop();
+struct io_metrics_t *machine_metrics_create(POOL *pool);
 
 void machine_register_desc(struct machine_desc_t *addme, IO_HANDLE *handle);
 struct machine_desc_t *machine_get_desc(IO_HANDLE h);
@@ -131,7 +165,7 @@ int machine_desc_write(IO_HANDLE h, void *buf, size_t *bytes);
 void machine_disable_write(IO_HANDLE h);
 void machine_disable_read(IO_HANDLE h);
 void machine_stop(IO_HANDLE h);
-size_t machine_get_bytes(IO_HANDLE h);
+void *machine_metrics(IO_HANDLE h);
 
 /***** Using Machines *****/
 IOM *machine_register(const char *name);
@@ -139,8 +173,6 @@ IOM *get_machine(const char *name);
 int machine_desc_init(POOL *p, IOM *machine, IO_DESC *b);
 const IOM *get_machine_ref(IO_HANDLE handle);
 IO_HANDLE request_handle(IOM *machine);
-void machine_set_read_size(IO_HANDLE h, size_t len);
-void machine_set_write_size(IO_HANDLE h, size_t len);
 void machine_cleanup();
 
 #endif

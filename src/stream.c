@@ -101,6 +101,7 @@ main_state_machine(void *args)
 {
     struct io_stream_t *st = (struct io_stream_t *)args;
 
+    machine_metrics_timer_start(1000);
     set_state(st, STREAM_READY);
 
     // Start segments
@@ -141,6 +142,7 @@ main_state_machine(void *args)
         segment_join(seg);
     }
 
+    machine_metrics_timer_stop();
     pthread_exit(NULL);
 }
 
@@ -437,6 +439,23 @@ stream_set_name(IO_STREAM h, const char *name)
     }
 
     snprintf(st->name, STREAM_NAME_LEN-1, "%s", name);
+}
+
+void
+stream_set_default_buflen(IO_STREAM h, size_t len)
+{
+    // Get stream from handle
+    struct io_stream_t *st = get_stream(h);
+    if (!st) {
+        error("Stream %d not found", h);
+        return;
+    }
+
+    int s = 0;
+    for (; s < st->n_segment; s++) {
+        IO_SEGMENT seg = st->segments[s];
+        segment_set_default_buflen(seg, len);
+    }
 }
 
 void

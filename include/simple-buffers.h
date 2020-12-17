@@ -20,10 +20,12 @@ struct rbiom_args {
 };
 
 const IOM *get_rb_machine();
-size_t rb_get_size(IO_HANDLE h);
-size_t rb_get_bytes(IO_HANDLE h);
 void rbiom_update_defaults(struct rbiom_args *rb);
 const IOM *new_rb_machine(IO_HANDLE *h, size_t buffer_size, size_t block_size);
+
+// Deprecated
+size_t rb_get_size(IO_HANDLE h);
+size_t rb_get_bytes(IO_HANDLE h);
 
 // Fixed-size Block Buffer
 struct fbbiom_args {
@@ -34,9 +36,11 @@ struct fbbiom_args {
 };
 
 const IOM *get_fbb_machine();
+const IOM *new_fbb_machine(IO_HANDLE *h, size_t buffer_size, size_t block_size);
+
+// Deprecated
 size_t fbb_get_size(IO_HANDLE h);
 size_t fbb_get_bytes(IO_HANDLE h);
-const IOM *new_fbb_machine(IO_HANDLE *h, size_t buffer_size, size_t block_size);
 
 // Sync Buffer
 // Continuous Variable-Size Buffer

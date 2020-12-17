@@ -561,7 +561,6 @@ get_file_machine()
         machine->stop = machine_disable_read;
         machine->read = machine_desc_read;
         machine->write = machine_desc_write;
-        machine->get_bytes = get_bytes;
         machine->obj = NULL;
 
         _file_machine = machine;

@@ -248,6 +248,12 @@ machine_desc_read(IO_HANDLE h, void *buf, size_t *bytes)
     machine_desc_acquire(d);
     struct io_filter_t *f = (struct io_filter_t *)d->io_read->obj;
     ret = f->call(f, buf, bytes, IO_NO_BLOCK, IO_DEFAULT_ALIGN);
+
+    if (d->metrics) {
+        IO_METRICS *m = &d->metrics->out;
+        m->fn(m, *bytes);
+    }
+
     machine_desc_release(d);
 
 do_return:
@@ -297,6 +303,12 @@ machine_desc_write(IO_HANDLE h, void *buf, size_t *bytes)
     machine_desc_acquire(d);
     struct io_filter_t *f = (struct io_filter_t *)d->io_write->obj;
     ret = f->call(f, buf, bytes, IO_NO_BLOCK, IO_DEFAULT_ALIGN);
+
+    if (d->metrics) {
+        IO_METRICS *m = &d->metrics->in;
+        m->fn(m, *bytes);
+    }
+
     machine_desc_release(d);
 
 do_return:
@@ -376,17 +388,56 @@ machine_desc_init(POOL *p, IOM *machine, IO_DESC *d)
     return IO_SUCCESS;
 }
 
-size_t
-machine_get_bytes(IO_HANDLE h)
+void
+machine_desc_set_write_size(IO_HANDLE h, size_t len)
 {
     struct machine_desc_t *d = machine_get_desc(h);
     if (!d) {
         error("Machine %d not found", h);
+        return;
     }
 
-    error("get_bytes() not implemented for %s: returning 0", d->machine->name);
+    d->io_write->size = len;
+}
 
-    return 0;
+void
+machine_desc_set_read_size(IO_HANDLE h, size_t len)
+{
+    struct machine_desc_t *d = machine_get_desc(h);
+    if (!d) {
+        error("Machine %d not found", h);
+        return;
+    }
+
+    d->io_read->size = len;
+}
+
+void *
+machine_metrics(IO_HANDLE h)
+{
+    struct machine_desc_t *d = machine_get_desc(h);
+    if (!d) {
+        error("Machine %d not found", h);
+        return NULL;
+    }
+
+    return d->metrics;
+}
+
+void
+machine_metrics_enable(IO_HANDLE h)
+{
+    struct machine_desc_t *d = machine_get_desc(h);
+    if (!d) {
+        error("Machine %d not found", h);
+        return;
+    }
+
+    struct io_metrics_t *metrics = machine_metrics_create(d->pool);
+
+    pthread_mutex_lock(&d->lock);
+    d->metrics = metrics;
+    pthread_mutex_unlock(&d->lock);
 }
 
 void

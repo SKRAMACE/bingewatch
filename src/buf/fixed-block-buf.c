@@ -9,6 +9,10 @@
 #include "block-list-buffer.h"
 #include "simple-buffers.h"
 
+#define LOGEX_TAG "FXB-BUF"
+#include "logging.h"
+#include "bw-log.h"
+
 #define DEFAULT_BUF_BYTES 100*MB
 #define DEFAULT_BLK_BYTES   1*MB
 #define DEFAULT_ALIGN 4
@@ -341,6 +345,8 @@ fbb_get_size(IO_HANDLE h)
 size_t
 fbb_get_bytes(IO_HANDLE h)
 {
+    error("***%s() has been deprecated.  Please migrate to IOM->get_metrics()***",
+        __FUNCTION__);
     struct ring_t *ring = (struct ring_t *)machine_get_desc(h);
     if (!ring) {
         return 0;

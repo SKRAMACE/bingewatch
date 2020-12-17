@@ -110,17 +110,15 @@ machine_register(const char *name)
     machine->create  = CREATE_NOIMPL;
     machine->read    = machine_desc_read;
     machine->write   = machine_desc_write;
-    machine->get_bytes = machine_get_bytes;
     machine->stop    = machine_stop;
     machine->destroy = NOIMPL(destroy);
+
+    machine->metrics = machine_metrics;
 
     machine->lock    = machine_lock;
     machine->unlock  = machine_unlock;
     machine->get_read_desc  = machine_get_read_desc;
     machine->get_write_desc = machine_get_write_desc;
-
-    machine->buf_read_size_rec = 0;
-    machine->buf_write_size_rec = 0;
 
     // Track new machine 
     machine_count++;
@@ -150,28 +148,6 @@ request_handle(IOM *machine)
     m->machine = machine;
 
     return m->handle;
-}
-
-void
-machine_set_write_size(IO_HANDLE h, size_t len)
-{
-    IOM *d = get_machine_by_handle(h);
-    if (!d) {
-        return;
-    }
-
-    d->buf_write_size_rec = len;
-}
-
-void
-machine_set_read_size(IO_HANDLE h, size_t len)
-{
-    IOM *d = get_machine_by_handle(h);
-    if (!d) {
-        return;
-    }
-
-    d->buf_read_size_rec = len;
 }
 
 void

@@ -23,10 +23,10 @@ static char *group = "";
 
 #define SEGMENT_ERROR(s) s->error.fn(s->error.arg)
 
-#define DEFAULT_BUF_LEN 10*MB
-
 #define SEG_GRP(x) ((x->group) ? *x->group"-" : "")
 #define SEGMENT_NAME_LEN 1024
+#define SEGMENT_DEFAULT_BUFLEN 10*MB
+
 static int segment_counter = 0;
 
 enum iostream_seg_ctrl_e {
@@ -45,7 +45,7 @@ struct io_segment_t {
 
     // Thread variables
     pthread_t thread;               // Thread for this segment
-    pthread_mutex_t lock;           // Stream lock
+    pthread_mutex_t lock;           // Segment lock
     pthread_fn fn;                  // Function for running the segment
 
     // State machine
@@ -62,6 +62,7 @@ struct io_segment_t {
     char name[SEGMENT_NAME_LEN];// Segment name
     POOL *pool;                 // Memory pool
     struct io_segment_t *next;  // Next segment in list
+    size_t default_buf_len;
 
     // Input
     IO_HANDLE in;                 // Input IOM
@@ -155,13 +156,15 @@ calculate_metrics(struct benchmark_t *bm, size_t bytes)
 */
 
 static inline void
-read_from_source(const IOM *src, struct io_segment_t *seg, char *buf, size_t *bytes)
+read_from_source(struct io_segment_t *seg, IO_DESC *src, char *buf, size_t *bytes)
 {
-    enum io_status status = src->read(seg->in, buf, bytes);
+    IO_HANDLE h = src->handle;
+    enum io_status status = src->machine->read(h, buf, bytes);
 
     if (IO_COMPLETE == status) {
         seg_info(seg, "Read complete");
         seg->do_complete = 1;
+
     } else if (IO_SUCCESS != status) {
         seg_error(seg, "Read error");
         SEGMENT_ERROR(seg);
@@ -171,24 +174,10 @@ read_from_source(const IOM *src, struct io_segment_t *seg, char *buf, size_t *by
 }
 
 static void
-write_to_dest(const IOM *dst, int out_index, struct io_segment_t *seg, char *buf, size_t *bytes)
+write_to_dest(struct io_segment_t *seg, IO_DESC *dst, char *buf, size_t *bytes)
 {
     // Set output index
-    IO_HANDLE out;
-    switch (out_index) {
-    case 0:
-        out = seg->out;
-        break;
-    case 1:
-        out = seg->out1;
-        break;
-    default:
-        seg_error(seg, "Invalid output index (%d)", out_index);
-        SEGMENT_ERROR(seg);
-        stop_segment(seg);
-        *bytes = 0;
-        return;
-    }
+    IO_HANDLE h = dst->handle;
 
     // Write to dest 
     size_t remaining = *bytes;
@@ -197,7 +186,7 @@ write_to_dest(const IOM *dst, int out_index, struct io_segment_t *seg, char *buf
 
     while (remaining) {
         size_t _bytes = remaining;
-        enum io_status status = dst->write(out, ptr, &_bytes);
+        enum io_status status = dst->machine->write(h, ptr, &_bytes);
         if (IO_COMPLETE == status) {
             seg_info(seg, "Write complete");
             seg->do_complete = 1;
@@ -223,19 +212,19 @@ segment_run(void *arg)
 {
     /* Arg management */
     struct io_segment_t *seg = (struct io_segment_t *)arg;
-    const IOM *src = get_machine_ref(seg->in);
-    const IOM *dst = get_machine_ref(seg->out);
-    const IOM *dst1 = get_machine_ref(seg->out1);
+    IO_DESC *src = machine_get_desc(seg->in);
+    IO_DESC *dst = machine_get_desc(seg->out);
+    IO_DESC *dst1 = machine_get_desc(seg->out1);
 
-    size_t buflen = (src->buf_read_size_rec > dst->buf_write_size_rec) ?
-        src->buf_read_size_rec : dst->buf_write_size_rec;
+    size_t buflen = (src->io_read->size > dst->io_write->size) ?
+        src->io_read->size : dst->io_write->size;
 
     if (dst1) {
-        buflen = (dst1->buf_write_size_rec > buflen) ? dst1->buf_write_size_rec : buflen;
+        buflen = (dst1->io_write->size > buflen) ? dst1->io_write->size : buflen;
     }
 
     if (0 == buflen) {
-        buflen = DEFAULT_BUF_LEN;
+        buflen = seg->default_buf_len;
     }
 
     /* Initialization */
@@ -274,7 +263,7 @@ segment_run(void *arg)
 
         seg->metric.request_count++;
         size_t bytes = buflen;
-        read_from_source(src, seg, buf, &bytes);
+        read_from_source(seg, src, buf, &bytes);
 
         if (bytes == 0) {
             /*
@@ -296,7 +285,7 @@ segment_run(void *arg)
         }
 
         size_t src_bytes = bytes;
-        write_to_dest(dst, 0, seg, buf, &bytes);
+        write_to_dest(seg, dst, buf, &bytes);
         if (bytes == 0) {
             continue;
         } else if (bytes != src_bytes) {
@@ -305,7 +294,7 @@ segment_run(void *arg)
 
         if (seg->out1 > 0) {
             bytes = src_bytes;
-            write_to_dest(dst, 1, seg, buf, &bytes);
+            write_to_dest(seg, dst1, buf, &bytes);
         }
     }
 
@@ -350,6 +339,7 @@ segment_create(POOL *pool, IO_HANDLE in, IO_HANDLE out, IO_HANDLE out1)
     seg->id = segment_counter++;
     seg->group = &group;
     seg->gsep = "";
+    seg->default_buf_len = SEGMENT_DEFAULT_BUFLEN;
     seg->fn = segment_run;
 
     snprintf(seg->name, SEGMENT_NAME_LEN-1, "seg%d", seg->id);
@@ -434,6 +424,16 @@ segment_set_name(IO_SEGMENT seg, char *name)
 {
     struct io_segment_t *s = (struct io_segment_t *)seg;
     snprintf(s->name, SEGMENT_NAME_LEN-1, "%s", name);
+}
+
+void
+segment_set_default_buflen(IO_SEGMENT seg, size_t len)
+{
+    struct io_segment_t *s = (struct io_segment_t *)seg;
+
+    pthread_mutex_lock(&s->lock);
+    s->default_buf_len = len;
+    pthread_mutex_unlock(&s->lock);
 }
 
 void
