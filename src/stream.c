@@ -459,6 +459,40 @@ stream_set_default_buflen(IO_STREAM h, size_t len)
 }
 
 void
+stream_enable_metrics(IO_STREAM h)
+{
+    // Get stream from handle
+    struct io_stream_t *st = get_stream(h);
+    if (!st) {
+        error("Stream %d not found", h);
+        return;
+    }
+
+    int s = 0;
+    for (; s < st->n_segment; s++) {
+        IO_SEGMENT seg = st->segments[s];
+        segment_enable_metrics(seg);
+    }
+}
+
+void
+stream_print_metrics(IO_STREAM h)
+{
+    // Get stream from handle
+    struct io_stream_t *st = get_stream(h);
+    if (!st) {
+        error("Stream %d not found", h);
+        return;
+    }
+
+    int s = 0;
+    for (; s < st->n_segment; s++) {
+        IO_SEGMENT seg = st->segments[s];
+        segment_print_metrics(seg);
+    }
+}
+
+void
 stream_set_log_level(char *level)
 {
     bw_set_log_level_str(level);

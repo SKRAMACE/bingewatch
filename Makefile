@@ -78,6 +78,7 @@ SRC = \
 	stream.c \
     segment.c \
     bw-log.c \
+    bw-util.c \
 	$(MACHINES) \
 	$(FILTERS) \
 	$(SDR) \
@@ -88,6 +89,7 @@ TEST = \
 	machine-metrics.c \
 	filter.c \
     bw-log.c \
+    bw-util.c \
 
 $(LIB): $(SRC)
 	$(CC) $(CFLAGS) $^ $(INC) $(LDFLAGS) $(LCFLAGS) -o $@

@@ -3,6 +3,7 @@
 
 #include "machine.h"
 #include "segment.h"
+#include "bw-util.h"
 #include "stream-state.h"
 #include "stream-metrics.h"
 
@@ -71,16 +72,6 @@ struct io_segment_t {
     IO_HANDLE out;                 // Output IOM
     IO_HANDLE out1;                // Output IOM
 };
-
-static void
-segment_print_metrics(struct io_segment_t *s)
-{
-    double response_rate = (double)s->metric.response_count / (double)s->metric.request_count;
-    seg_trace(s, "Metric: %zd requests (%0.2f %%)",
-        s->metric.request_count, response_rate * 100);
-    seg_trace(s, "Metric: %zd received (%zd bytes)",
-        s->metric.received_count, s->metric.received_bytes);
-}
 
 /*
  * Stop IO Machines and set running flag to false
@@ -166,7 +157,7 @@ read_from_source(struct io_segment_t *seg, IO_DESC *src, char *buf, size_t *byte
         seg->do_complete = 1;
 
     } else if (IO_SUCCESS != status) {
-        seg_error(seg, "Read error");
+        seg_error(seg, "Read error (%d)", status);
         SEGMENT_ERROR(seg);
         stop_segment(seg);
         *bytes = 0;
@@ -192,7 +183,7 @@ write_to_dest(struct io_segment_t *seg, IO_DESC *dst, char *buf, size_t *bytes)
             seg->do_complete = 1;
             break;
         } else if (IO_SUCCESS != status) {
-            seg_error(seg, "Write error");
+            seg_error(seg, "Write error (%d)", status);
             SEGMENT_ERROR(seg);
             stop_segment(seg);
             wr_bytes = 0;
@@ -297,8 +288,6 @@ segment_run(void *arg)
             write_to_dest(seg, dst1, buf, &bytes);
         }
     }
-
-    segment_print_metrics(seg);
 
     pfree(pool);
     cleanup_segment(seg);
@@ -434,6 +423,62 @@ segment_set_default_buflen(IO_SEGMENT seg, size_t len)
     pthread_mutex_lock(&s->lock);
     s->default_buf_len = len;
     pthread_mutex_unlock(&s->lock);
+}
+
+void
+segment_enable_metrics(IO_SEGMENT seg)
+{
+    struct io_segment_t *s = (struct io_segment_t *)seg;
+
+    machine_metrics_enable(s->in);
+    machine_metrics_enable(s->out);
+    machine_metrics_enable(s->out1);
+}
+
+void
+segment_print_metrics(IO_SEGMENT seg)
+{
+    struct io_segment_t *s = (struct io_segment_t *)seg;
+    printf("%s%s%s:\n", *s->group, s->gsep, s->name);
+
+    IO_HANDLE h[3] = {s->in, s->out, s->out1};
+    for (int i = 0; i < 3; i++) {
+        IO_DESC *d = machine_get_desc(h[i]);
+        if (!d) {
+            continue;
+        }
+
+        char bstr[64];
+        char rstr[64];
+        struct io_metrics_t *m = d->machine->metrics(h[i]);
+
+        double t0_us, t1_us, e_in, e_out;
+        t0_us = m->in.t_start.tv_sec * 1000000 + m->in.t_start.tv_usec;
+        t1_us = m->in.t_stop.tv_sec * 1000000 + m->in.t_stop.tv_usec;
+        e_in = (t1_us - t0_us);
+
+        t0_us = m->out.t_start.tv_sec * 1000000 + m->out.t_start.tv_usec;
+        t1_us = m->out.t_stop.tv_sec * 1000000 + m->out.t_stop.tv_usec;
+        e_out = (t1_us - t0_us);
+
+        printf("\t%s[%d]:\n", d->machine->name, h[i]);
+        size_t_fmt(bstr, 64, m->in.total_bytes);
+        if (m->in.total_bytes > 0) {
+            double_fmt(rstr, 64, e_in);
+            printf("\tI: %10sB %10sB/s\n", bstr, rstr);
+        } else {
+            printf("\tI: %10sB %10sB/s\n", "---", "---");
+        }
+
+        size_t_fmt(bstr, 64, m->out.total_bytes);
+        if (m->out.total_bytes > 0) {
+            double_fmt(rstr, 64, e_in);
+            printf("\tO: %10sB %10sB/s\n", bstr, rstr);
+        } else {
+            printf("\tO: %10sB %10sB/s\n", "---", "---");
+        }
+        printf("\n");
+    }
 }
 
 void

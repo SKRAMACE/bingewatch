@@ -249,6 +249,10 @@ machine_desc_read(IO_HANDLE h, void *buf, size_t *bytes)
     struct io_filter_t *f = (struct io_filter_t *)d->io_read->obj;
     ret = f->call(f, buf, bytes, IO_NO_BLOCK, IO_DEFAULT_ALIGN);
 
+    if (ret == IO_ERROR) {
+        ret = f->call(f, buf, bytes, IO_NO_BLOCK, IO_DEFAULT_ALIGN);
+    }
+
     if (d->metrics) {
         IO_METRICS *m = &d->metrics->out;
         m->fn(m, *bytes);
@@ -427,13 +431,24 @@ machine_metrics(IO_HANDLE h)
 void
 machine_metrics_enable(IO_HANDLE h)
 {
+    if (h == 0) {
+        return;
+    }
+
     struct machine_desc_t *d = machine_get_desc(h);
     if (!d) {
         error("Machine %d not found", h);
         return;
     }
 
-    struct io_metrics_t *metrics = machine_metrics_create(d->pool);
+    pthread_mutex_lock(&d->lock);
+    struct io_metrics_t *metrics = d->metrics;
+    pthread_mutex_unlock(&d->lock);
+
+    if (metrics) {
+        return;
+    }
+    metrics = machine_metrics_create(d->pool);
 
     pthread_mutex_lock(&d->lock);
     d->metrics = metrics;
