@@ -233,7 +233,7 @@ run_byte_count_stream_test(void *data, size_t bytes)
 
     char *outfile = "byte_count_stream_test_out";
     char *rdata = NULL;
-    size_t limit_bytes = 1024 * 1024;
+    size_t limit_bytes = 1024 * 1024 * 100;
 
     // Create file machines
     IO_HANDLE in = new_file_read_machine("/dev/urandom");
@@ -283,6 +283,68 @@ do_return:
     return ret;
 }
 
+static int
+run_stream_metrics_test(void *data, size_t bytes)
+{
+    int ret = 1;
+    printf("%s\n", __FUNCTION__);
+
+    char *outfile = "run_stream_metrics_test_out";
+    char *rdata = NULL;
+    size_t limit_bytes = 1024 * 1024 * 100;
+
+    // Create file machines
+    IO_HANDLE in = new_file_read_machine("/dev/urandom");
+    IO_HANDLE out = new_file_machine(rootdir, outfile, "float", FFILE_WRITE);
+
+    IO_HANDLE buf1;
+    IO_HANDLE buf2;
+    new_rb_machine(&buf1, 100, 20);
+    new_rb_machine(&buf2, 100, 20);
+
+    // Create byte counter
+    POOL *p = create_pool();
+    IO_FILTER *limiter = create_byte_count_limit_filter(p, "limiter", limit_bytes);
+    add_write_filter(buf1, limiter);
+
+    // Create stream
+    IO_STREAM stream = new_stream();
+    io_stream_add_segment(stream, in, buf1, BW_NOFLAGS);
+    io_stream_add_segment(stream, buf1, buf2, BW_NOFLAGS);
+    io_stream_add_segment(stream, buf2, out, BW_NOFLAGS);
+
+    machine_metrics_enable(buf1);
+
+    stream_enable_metrics(stream);
+    start_stream(stream);
+    join_stream(stream);
+    stream_print_metrics(stream);
+
+    //file_machine->destroy(in);
+    //file_machine->destroy(out);
+
+    // Read and compare
+    out = new_file_machine(rootdir, outfile, "float", FFILE_READ);
+    rdata = malloc(limit_bytes);
+
+    size_t b = limit_bytes;
+    file_machine->read(out, rdata, &b);
+    if (b != limit_bytes) {
+        printf("\tFAIL: Read byte mismatch\n");
+        goto do_return;
+    }
+
+    ret = 0;
+    printf("\tPASS\n");
+
+do_return:
+    if (rdata) {
+        free(rdata);
+    }
+
+    return ret;
+}
+
 int
 main(int nargs, char *argv[])
 {
@@ -295,6 +357,7 @@ main(int nargs, char *argv[])
     run_buffered_stream_test(data, bytes);
     run_multisegment_stream_test(data, bytes);
     run_byte_count_stream_test(data, bytes);
+    run_stream_metrics_test(data, bytes);
 
     if (data) {
         free(data);
