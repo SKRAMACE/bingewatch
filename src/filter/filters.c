@@ -32,13 +32,19 @@ byte_count_limiter(IO_FILTER_ARGS)
 
     if (limit->total + bytes <= limit->limit) {
         limit->total += bytes;
+
     } else {
-        *IO_FILTER_ARGS_BYTES = limit->limit - limit->total;
-        ret = IO_COMPLETE;
+        bytes = limit->limit - limit->total;
+        limit->total += bytes;
     }
 
-    if (dir == IOF_WRITE) { 
-        int ret = CALL_NEXT_FILTER();
+    if (dir == IOF_WRITE) {
+        *IO_FILTER_ARGS_BYTES = bytes;
+        ret = CALL_NEXT_FILTER();
+    }
+
+    if (limit->total >= limit->limit) {
+        ret = (ret == IO_SUCCESS) ? IO_COMPLETE : ret;
     }
 
     return ret;
