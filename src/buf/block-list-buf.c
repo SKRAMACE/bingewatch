@@ -61,46 +61,62 @@ block_list_alloc(POOL *p, size_t block_count) {
 /*
  * Allocate a fixed number of bytes for each block
  */
-int
+size_t
 block_data_alloc(POOL *p, void *block, size_t bytes_per_block) {
+    int n_blocks = 0;
+
     struct __block_t *b = (struct __block_t *)block;
-    while (b) {
+    do {
         b->data = palloc(p, bytes_per_block);
         b->bytes = 0;
         b->size = bytes_per_block;
-        if (!b->data) {
-            printf("Failed to allocate %zu bytes for block data\n", bytes_per_block);
-            return IO_ERROR;
-        }
-        b = b->next;
-    }
 
-    return IO_SUCCESS;
+        n_blocks++;
+        b = b->next;
+    } while (b && (b != block));
+
+    char full_bytestr[64];
+    char block_bytestr[64];
+    size_t_fmt(full_bytestr, 64, n_blocks * bytes_per_block);
+    size_t_fmt(block_bytestr, 64, bytes_per_block);
+    trace("Allocating %sB (%sB * %d blocks)", full_bytestr, block_bytestr, n_blocks);
+    return n_blocks * bytes_per_block;
 }
 
 /*
  * Allocate a large chunk of memory and partition for each block
  */
-int
+size_t
 block_data_fastalloc(POOL *p, void *block, size_t bytes_per_block) {
-    // Count bytes
-    struct __block_t *b = (struct __block_t *)block;
-    size_t total_bytes = 0;
-    while (b) {
-        total_bytes += bytes_per_block;
-        b = b->next;
+    if (!block) {
+        return 0;
     }
 
-    // One alloc (hence "fastalloc")
-    char *buf = palloc(p, total_bytes);
+    // Calculate size
+    struct __block_t *b = (struct __block_t *)block;
+    int n_blocks = 0;
+    do {
+        n_blocks++;
+        b = b->next;
+    } while (b && (b != block));
+
+    char full_bytestr[64];
+    char block_bytestr[64];
+    size_t_fmt(full_bytestr, 64, n_blocks * bytes_per_block);
+    size_t_fmt(block_bytestr, 64, bytes_per_block);
+    size_t bytes = n_blocks * bytes_per_block;
+    trace("Fast-allocating %sB (%sB * %d blocks)", full_bytestr, block_bytestr, n_blocks);
+
+    // Allocate memory
+    char *buf = palloc(p, bytes);
     if (!buf) {
-        printf("Failed to allocate %zu bytes for block data\n", total_bytes);
-        return IO_ERROR;
+        error("Failed to allocate bytes for block buffer", bytes);
+        return 0;
     }
 
     // Partition buffer into blocks
     b = (struct __block_t *)block;
-    while (b) {
+    while (b && !b->data) {
         b->data = buf;
         b->bytes = 0;
         b->size = bytes_per_block;
@@ -108,7 +124,7 @@ block_data_fastalloc(POOL *p, void *block, size_t bytes_per_block) {
         b = b->next;
     }
 
-    return IO_SUCCESS;
+    return bytes;
 }
 
 void

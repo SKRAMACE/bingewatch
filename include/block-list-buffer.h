@@ -6,13 +6,30 @@
 #define BLOCK_FULL(b) (b->size == b->bytes)
 #define BLOCK_EMPTY(b) (0 == b->bytes)
 
+enum block_state_e {
+    BLB_STATE_NORMAL,
+    BLB_STATE_DELETE,
+};
+
 // Generic Block descriptor
 struct __block_t {
+    // Pointer to next block
     void *next;
+
+    // Pointer to the block data buffer
+    char *data;
+
+    // Size of the block data in bytes
     size_t size;
+
+    // Number of bytes in use
     size_t bytes;
-    char *data;         // Data pointer
-    void *__block_t_impl; // This is a placeholder so every implementation can be casted to this type
+
+    // Block state
+    enum block_state_e state;
+
+    // Placeholder for extension
+    void *__block_t_impl;
 };
 
 // Initialization Function Type
@@ -24,8 +41,8 @@ struct __block_t *block_list_alloc(POOL *p, size_t block_count);
 struct __block_t *block_list_alloc_custom(POOL *p, size_t size_of, size_t block_count);
 
 // List Data Allocation
-int block_data_alloc(POOL *p, void *block, size_t bytes_per_block);
-int block_data_fastalloc(POOL *p, void *block, size_t bytes_per_block);
+size_t block_data_alloc(POOL *p, void *block, size_t bytes_per_block);
+size_t block_data_fastalloc(POOL *p, void *block, size_t bytes_per_block);
 
 // Buffer Management
 void blb_lock(IO_HANDLE h);
