@@ -53,7 +53,7 @@ TESTLIBS = \
 
 BUF = \
 	block-list-buf.c \
-	flexible-ring-buf.c \
+	ring-buf.c \
 	fixed-block-buf.c \
 
 SDR = \
