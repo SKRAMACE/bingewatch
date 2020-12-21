@@ -426,5 +426,6 @@ rb_get_size(IO_HANDLE h)
 void
 rb_set_log_level(char *level)
 {
+    blb_set_log_level(level);
     bw_set_log_level_str(level);
 }

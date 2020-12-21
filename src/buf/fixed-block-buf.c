@@ -353,3 +353,10 @@ fbb_get_bytes(IO_HANDLE h)
     }
     return ring->bytes;
 }
+
+void
+fbb_set_log_level(char *level)
+{
+    blb_set_log_level(level);
+    bw_set_log_level_str(level);
+}

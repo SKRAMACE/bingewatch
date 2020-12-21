@@ -8,6 +8,11 @@
 #include "machine.h"
 #include "filter.h"
 #include "block-list-buffer.h"
+#include "bw-util.h"
+
+#define LOGEX_TAG "BL-BUF"
+#include "logging.h"
+#include "bw-log.h"
 
 // Holds all of the __buffer structs
 static pthread_mutex_t buffer_list_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -143,4 +148,10 @@ blb_init_struct(POOL *p, IO_DESC *b)
     b->io_write->alloc = p;
 
     return IO_SUCCESS;
+}
+
+void
+blb_set_log_level(char *level)
+{
+    bw_set_log_level_str(level);
 }
