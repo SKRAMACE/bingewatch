@@ -10,6 +10,10 @@
 #include "sdr-machine.h"
 #include "sdrs.h"
 
+#define LOGEX_TAG "BW-SOAPY"
+#include "logging.h"
+#include "bw-log.h"
+
 #define SOAPY_SERIAL_LEN 32
 #define MAX_ERROR_COUNT 32
 
@@ -43,6 +47,8 @@ struct soapy_channel_t {
     int error_counter;
     float tia_gain;
     float pga_gain;
+    double expected_timestamp;
+    double ns_per_sample;
 };
 
 static struct soapy_channel_t *
@@ -84,47 +90,48 @@ soapy_channel_init(struct soapy_channel_t *chan)
         ret = SoapySDRDevice_setAntenna(chan->sdr, SOAPY_SDR_RX, 0, "LNAH");
         break;
     default:
-        printf("ERROR: Unknown antenna \"%d\"\n", chan->antenna);
+        error("Unknown antenna \"%d\"", chan->antenna);
     }
 
     if (ret != 0) {
-        printf("setAntenna fail: %s\n", SoapySDRDevice_lastError());
+        error("setAntenna fail: %s", SoapySDRDevice_lastError());
         return IO_ERROR;
     }
   
     // Set sample rate
     if (SoapySDRDevice_setSampleRate(chan->sdr, SOAPY_SDR_RX, 0, chan->_sdr.rate) != 0) {
-        printf("setSampleRate fail: %s\n", SoapySDRDevice_lastError());
+        error("setSampleRate fail: %s", SoapySDRDevice_lastError());
         return IO_ERROR;
     }
+    chan->ns_per_sample = (double)1000000000 / (double)chan->_sdr.rate;
 
     // Set bandwidth
     double bandwidth = (chan->_sdr.bandwidth) ? chan->_sdr.bandwidth : chan->_sdr.rate;
     if (SoapySDRDevice_setBandwidth(chan->sdr, SOAPY_SDR_RX, 0, bandwidth) != 0) {
-        printf("setSampleRate fail: %s\n", SoapySDRDevice_lastError());
+        error("setSampleRate fail: %s", SoapySDRDevice_lastError());
         return IO_ERROR;
     }
 
     // Set frequency
     if (SoapySDRDevice_setFrequency(chan->sdr, SOAPY_SDR_RX, 0, chan->_sdr.freq, NULL) != 0) {
-        printf("setFrequency fail: %s\n", SoapySDRDevice_lastError());
+        error("setFrequency fail: %s", SoapySDRDevice_lastError());
         return IO_ERROR;
     }
 
     // Set gain (LNA gain)
     if (SoapySDRDevice_setGainElement(chan->sdr, SOAPY_SDR_RX, 0, "LNA", chan->_sdr.gain) != 0) {
-        printf("setGainElement fail: %s\n", SoapySDRDevice_lastError());
+        error("setGainElement fail: %s", SoapySDRDevice_lastError());
         return IO_ERROR;
     }
 
     // Set other gain values
     if (SoapySDRDevice_setGainElement(chan->sdr, SOAPY_SDR_RX, 0, "TIA", chan->tia_gain) != 0) {
-        printf("setGainElement fail: %s\n", SoapySDRDevice_lastError());
+        error("setGainElement fail: %s", SoapySDRDevice_lastError());
         return IO_ERROR;
     }
 
     if (SoapySDRDevice_setGainElement(chan->sdr, SOAPY_SDR_RX, 0, "PGA", chan->pga_gain) != 0) {
-        printf("setGainElement fail: %s\n", SoapySDRDevice_lastError());
+        error("setGainElement fail: %s", SoapySDRDevice_lastError());
         return IO_ERROR;
     }
 
@@ -147,7 +154,7 @@ read_data_from_hw(IO_FILTER_ARGS)
 
     if (!chan->_sdr.init) {
         if (soapy_channel_init(chan) != IO_SUCCESS) {
-            printf("ERROR: Failed to init channel\n");
+            error("Failed to init soapy channel");
             return IO_ERROR;
         }
         chan->_sdr.init = 1;
@@ -166,17 +173,29 @@ read_data_from_hw(IO_FILTER_ARGS)
         if (samples_read < 0) {
             int e = samples_read;
             const char *e_msg = SoapySDRDevice_lastError();
-            printf("SoapySDRDevice_readStream() error %d: %s\n", e, e_msg);
-            *IO_FILTER_ARGS_BYTES = 0;
-            return (++chan->error_counter > MAX_ERROR_COUNT) ? IO_ERROR : IO_SUCCESS;
-        } else {
-            chan->error_counter = 0;
+            error("SoapySDRDevice_readStream() error %d: %s", e, e_msg);
+            goto error_return;
         }
+
+        long long expected = (long long)(chan->expected_timestamp + .5);
+        int diff = (int)(timeNs - expected);
+        chan->expected_timestamp = (double)timeNs + (double)samples_read * chan->ns_per_sample;
+
+        if (diff < -1 || diff > 1) {
+            error("data read clock mismatch: %d", diff);
+            goto error_return;
+        }
+
+        chan->error_counter = 0;
         remaining -= (size_t)samples_read;
         data += samples_read;
     }
 
     return IO_SUCCESS;
+
+error_return:
+    *IO_FILTER_ARGS_BYTES = 0;
+    return (++chan->error_counter > MAX_ERROR_COUNT) ? IO_ERROR : IO_SUCCESS;
 }
 
 // Device info
@@ -185,7 +204,8 @@ enumerate_devices()
 {
     size_t records;
     SoapySDRKwargs *results = SoapySDRDevice_enumerate(NULL, &records);
-    printf("\tFound 0 Soapy Devices\n");
+
+    printf("Found %d Soapy Devices", (int)records);
     if (records == 0) {
         return;
     }
@@ -296,7 +316,7 @@ create_device(POOL *p, void *args)
     char serial[SOAPY_SERIAL_LEN];
     get_soapy_info(id_str, &id, serial);
     if (id < 0) {
-        printf("ERROR: Soapy Device \"%s\" Not Found\n", id_str);
+        error("Soapy Device \"%s\" Not Found", id_str);
         enumerate_devices();
         return NULL;
     }
@@ -307,15 +327,14 @@ create_device(POOL *p, void *args)
     SoapySDRDevice *sdr = SoapySDRDevice_make(&kwargs);
     SoapySDRKwargs_clear(&kwargs);
     if (!sdr) {
-        printf("ERROR: SoapySDRDevice_make fail: %s\n", SoapySDRDevice_lastError());
+        error("SoapySDRDevice_make fail: %s", SoapySDRDevice_lastError());
         return NULL;
     }
 
     // Success!  Now, create the IOM structs
     struct soapy_device_t *dev = pcalloc(p, sizeof(struct soapy_device_t));
     if (!dev) {
-        printf("ERROR: Failed to allocate %zu bytes for sdr device\n",
-            sizeof(struct soapy_device_t));
+        error("Failed to allocate %zu bytes for sdr device\n", sizeof(struct soapy_device_t));
         pfree(p);
         return 0;
     }
@@ -338,7 +357,7 @@ create_channel(POOL *p, struct sdr_device_t *dev, void *args)
     if (SoapySDRDevice_setupStream(dev->hw, &chan->rx, SOAPY_SDR_RX, SOAPY_SDR_CF32,
             NULL, 0, NULL) != 0)
     {
-        printf("setupStream fail: %s\n", SoapySDRDevice_lastError());
+        error("setupStream fail: %s", SoapySDRDevice_lastError());
         return NULL;
     }
 
@@ -360,7 +379,7 @@ create_rx_filter(POOL *p, struct sdr_channel_t *chan, struct sdr_device_t *dev)
     fhw->obj = chan;
 
     if (!fhw) {
-        printf("Error creating rx filters\n");
+        error("Failed to create soapy rx filters");
         return NULL;
     }
 
@@ -387,7 +406,7 @@ api_init(IOM *machine)
 static IO_HANDLE
 soapy_create(void *args)
 {
-    printf("ERROR: Implementation Error: Use \"sdr_create()\" to implement a soapy machine\n");
+    error("Implementation Error: Use \"sdr_create()\" to implement a soapy machine");
     return 0;
 }
 
@@ -412,7 +431,7 @@ soapy_set_val(IO_HANDLE h, int var, double val)
     case SOAPY_VAR_BANDWIDTH:
         chan->bandwidth = val; break;
     default:
-        printf("Unknown Var (%d)\n", var);
+        error("Unknown Var (%d)", var);
         goto failure;
     }
 
@@ -439,7 +458,7 @@ soapy_set_val(IO_HANDLE h, int var, double val)
         }
         break;
     default:
-        printf("Unknown Var (%d)\n", var);
+        error("Unknown Var (%d)", var);
         goto failure;
     }
 
@@ -450,7 +469,7 @@ success:
     return 0;
 
 soapy_error:
-    printf("Soapy Error: %s\n", SoapySDRDevice_lastError());
+    error("Soapy Error: %s\n", SoapySDRDevice_lastError());
     chan->error = 1;
 
 failure:
@@ -519,4 +538,11 @@ soapy_set_rx(IO_HANDLE h, double freq, double rate, double bandwidth)
     chan->_sdr.freq = freq;
     chan->_sdr.rate = rate;
     chan->_sdr.bandwidth = bandwidth;
+}
+
+void
+soapy_set_log_level(char *level)
+{
+    sdrrx_set_log_level(level);
+    bw_set_log_level_str(level);
 }

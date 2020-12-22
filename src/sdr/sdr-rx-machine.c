@@ -9,6 +9,10 @@
 #include "sdr-machine.h"
 #include "simple-buffers.h"
 
+#define LOGEX_TAG "BW-SDRRX"
+#include "logging.h"
+#include "bw-log.h"
+
 static pthread_mutex_t sdr_list_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static struct sdr_channel_t *channels = NULL;
@@ -172,7 +176,7 @@ cleanup_device(struct sdr_device_t *device)
         return;
     }
 
-    printf("All channels have been destroyed.  Destroying device %d.\n", d->id);
+    info("All channels have been destroyed.  Destroying device %d.", d->id);
 
     d->destroy_device_impl(d);
     
@@ -292,7 +296,7 @@ sdr_rx_read(IO_HANDLE h, void *buf, size_t *len)
 static int
 sdr_rx_write(IO_HANDLE h, void *buf, size_t *len)
 {
-    printf("ERROR: sdr_rx_machine has no write function\n");
+    error("sdr_rx_machine has no write function");
     return IO_ERROR;
 }
 
@@ -300,14 +304,14 @@ static enum io_status
 init_rx_filter(struct sdr_channel_t *chan, struct sdr_device_t *dev, sdr_filter_init rx)
 {
     if (!rx) {
-        printf("Failed to initialize rx filter: Null sdr_init function\n");
+        error("Failed to initialize rx filter: Null sdr_init function");
         return IO_ERROR;
     }
 
     // Create io descriptors
     chan->io = (struct io_desc *)pcalloc(chan->pool, sizeof(struct io_desc));
     if (!chan->io) {
-        printf("Failed to initialize read descriptor\n");
+        error("Failed to initialize read descriptor");
         return IO_ERROR;
     }
     chan->io->alloc = chan->pool;
@@ -332,7 +336,7 @@ sdr_create(const IOM *machine, void *arg)
 
     POOL *var_pool = create_subpool(machine->alloc);
     if (!var_pool) {
-        printf("ERROR: Failed to create memory pool(s)\n");
+        error("Failed to create sdr rx memory pool");
         return 0;
     }
 
@@ -343,13 +347,13 @@ sdr_create(const IOM *machine, void *arg)
     // Device Init
     POOL *device_pool = create_subpool(machine->alloc);
     if (!device_pool) {
-        printf("ERROR: Failed to create memory pool(s)\n");
+        error("Failed to create sdr rx device memory pool");
         return 0;
     }
 
     struct sdr_device_t *device = api->device(device_pool, arg);
     if (!device) {
-        printf("ERROR: Failed to create device descriptor\n");
+        error("Failed to create sdr rx device descriptor\n");
         pfree(device_pool);
         return 0;
     }
@@ -359,14 +363,14 @@ sdr_create(const IOM *machine, void *arg)
     // Channel Init
     POOL *channel_pool = create_subpool(machine->alloc);
     if (!channel_pool) {
-        printf("ERROR: Failed to create memory pool(s)\n");
+        error("Failed to create sdr rx channel memory pool");
         pfree(device_pool);
         return 0;
     }
 
     struct sdr_channel_t *chan = api->channel(channel_pool, device, arg);
     if (!chan) {
-        printf("ERROR: Failed to create a new channel\n");
+        error("Failed to create new sdr rx channel");
         pfree(device_pool);
         pfree(channel_pool);
         return 0;
@@ -376,7 +380,7 @@ sdr_create(const IOM *machine, void *arg)
     chan->dir = SDR_CHAN_RX;
 
     if (init_rx_filter(chan, device, api->rx_filter) != IO_SUCCESS) {
-        printf("ERROR: Failed to initialize filter\n");
+        error("Failed to initialize sdr rx filter\n");
         pfree(device_pool);
         pfree(channel_pool);
         return 0;
@@ -386,7 +390,7 @@ sdr_create(const IOM *machine, void *arg)
     add_channel(device, chan);
 
     chan->handle = request_handle((IOM *)machine);
-    printf("Handle for %s = %d\n", machine->name, chan->handle);
+    info("Handle for %s = %d", machine->name, chan->handle);
 
     return chan->handle;
 }
@@ -451,4 +455,10 @@ sdr_get_channel(IO_HANDLE h, const struct sdr_device_t *dev)
     }
 
     return NULL;
+}
+
+void
+sdrrx_set_log_level(char *level)
+{
+    bw_set_log_level_str(level);
 }
