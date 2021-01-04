@@ -121,6 +121,7 @@ machine_destroy_desc(IO_HANDLE h)
         continue;
     }
 
+    info("Destroying machine %d", h);
     pthread_mutex_lock(&machine_desc_list_lock);
     free_machine_desc(d);
     pthread_mutex_unlock(&machine_desc_list_lock);

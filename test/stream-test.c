@@ -174,10 +174,8 @@ run_multisegment_stream_test(void *data, size_t bytes)
     IO_HANDLE in = new_file_machine(rootdir, infile, "float", FFILE_RW);
     IO_HANDLE out = new_file_machine(rootdir, outfile, "float", FFILE_WRITE);
 
-    IO_HANDLE buf1;
-    IO_HANDLE buf2;
-    new_rb_machine(&buf1, 100, 20);
-    new_rb_machine(&buf2, 100, 20);
+    IO_HANDLE buf1 = new_rb_machine();
+    IO_HANDLE buf2 = new_rb_machine();
 
     // Create stream
     IO_STREAM stream = new_stream();
@@ -239,10 +237,8 @@ run_byte_count_stream_test(void *data, size_t bytes)
     IO_HANDLE in = new_file_read_machine("/dev/urandom");
     IO_HANDLE out = new_file_machine(rootdir, outfile, "float", FFILE_WRITE);
 
-    IO_HANDLE buf1;
-    IO_HANDLE buf2;
-    new_rb_machine(&buf1, 100, 20);
-    new_rb_machine(&buf2, 100, 20);
+    IO_HANDLE buf1 = new_rb_machine();
+    IO_HANDLE buf2 = new_rb_machine();
 
     // Create byte counter
     POOL *p = create_pool();
@@ -291,16 +287,14 @@ run_stream_metrics_test(void *data, size_t bytes)
 
     char *outfile = "run_stream_metrics_test_out";
     char *rdata = NULL;
-    size_t limit_bytes = 1024 * 1024 * 100;
+    size_t limit_bytes = 1024 * 1024 * 1024;
 
     // Create file machines
     IO_HANDLE in = new_file_read_machine("/dev/urandom");
     IO_HANDLE out = new_file_machine(rootdir, outfile, "float", FFILE_WRITE);
 
-    IO_HANDLE buf1;
-    IO_HANDLE buf2;
-    new_rb_machine(&buf1, 100, 20);
-    new_rb_machine(&buf2, 100, 20);
+    IO_HANDLE buf1 = new_rb_machine();
+    IO_HANDLE buf2 = new_rb_machine();
 
     // Create byte counter
     POOL *p = create_pool();

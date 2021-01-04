@@ -258,10 +258,7 @@ io_stream_add_segment(IO_STREAM h, IO_HANDLE in, IO_HANDLE out, int flag)
     }
 
     if (flag & BW_BUFFERED) {
-        // Init Asynchronous Buffer IO Machine
-        const IOM *rb = get_rb_machine();
-        struct rbiom_args rb_vars = {0, 0, 0};
-        IO_HANDLE buf = rb->create(&rb_vars);
+        IO_HANDLE buf = new_rb_machine();
 
         create_segment_1_1(st, in, buf);
         create_segment_1_1(st, buf, out);
@@ -284,11 +281,8 @@ io_stream_add_tee_segment(IO_STREAM h, IO_HANDLE in, IO_HANDLE out, IO_HANDLE ou
     }
 
     if (flag & BW_BUFFERED) {
-        // Init Asynchronous Buffer IO Machine
-        const IOM *rb = get_rb_machine();
-        struct rbiom_args rb_vars = {0, 0, 0};
-        IO_HANDLE buf0 = rb->create(&rb_vars);
-        IO_HANDLE buf1 = rb->create(&rb_vars);
+        IO_HANDLE buf0 = new_rb_machine();
+        IO_HANDLE buf1 = new_rb_machine();
 
         create_segment_1_2(st, in, buf0, buf1);
         create_segment_1_1(st, buf0, out);

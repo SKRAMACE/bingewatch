@@ -21,7 +21,8 @@ static size_t default_buf_bytes = DEFAULT_BUF_BYTES;
 static size_t default_blk_bytes = DEFAULT_BLK_BYTES;
 static uint16_t default_align = DEFAULT_ALIGN;
 
-static IOM *ring_buffer_machine = NULL;
+const IOM *fbb_machine;
+static IOM *_fbb_machine = NULL;
 
 // Ring descriptor
 struct ring_t {
@@ -219,7 +220,7 @@ static IO_HANDLE
 create_buffer(void *arg)
 {
     // Create a new pool for this buffer
-    POOL *p = create_subpool(ring_buffer_machine->alloc);
+    POOL *p = create_subpool(_fbb_machine->alloc);
     if (!p) {
         printf("ERROR: Failed to create memory pool\n");
         return 0;
@@ -270,7 +271,7 @@ create_buffer(void *arg)
     pthread_mutex_init(&ring->wlock, NULL);
     pthread_mutex_init(&ring->rlock, NULL);
 
-    if (machine_desc_init(p, ring_buffer_machine, (IO_DESC *)ring) != IO_SUCCESS) {
+    if (machine_desc_init(p, _fbb_machine, (IO_DESC *)ring) != IO_SUCCESS) {
         pfree(p);
         return 0;
     }
@@ -299,7 +300,7 @@ create_buffer(void *arg)
 const IOM *
 get_fbb_machine()
 {
-    IOM *machine = ring_buffer_machine;
+    IOM *machine = _fbb_machine;
     if (!machine) {
         machine = machine_register("fixed_block_buffer");
 
@@ -307,29 +308,27 @@ get_fbb_machine()
         machine->create = create_buffer;
         machine->destroy = destroy_fbb_machine;
 
-        ring_buffer_machine = machine;
+        _fbb_machine = machine;
+        fbb_machine = machine;
     }
     return (const IOM *)machine;
 }
 
-const IOM *
-new_fbb_machine_fill(IO_HANDLE *h, size_t buffer_size, size_t block_size)
+IO_HANDLE
+new_fbb_machine_fill(size_t buffer_size, size_t block_size)
 {
-    const IOM *fbb_machine = get_fbb_machine();
-
+    const IOM *m = get_fbb_machine();
     struct fbbiom_args fbb_args = {buffer_size, block_size, 0, BF_BLOCKFILL};
-    *h = fbb_machine->create(&fbb_args);
-    return fbb_machine;
+    return m->create(&fbb_args);
 }
 
-const IOM *
-new_fbb_machine(IO_HANDLE *h, size_t buffer_size, size_t block_size)
+IO_HANDLE
+new_fbb_machine(size_t buffer_size, size_t block_size)
 {
-    const IOM *fbb_machine = get_fbb_machine();
+    const IOM *m = get_fbb_machine();
 
     struct fbbiom_args fbb_args = {buffer_size, block_size, 0, 0};
-    *h = fbb_machine->create(&fbb_args);
-    return fbb_machine;
+    return m->create(&fbb_args);
 }
 
 size_t
@@ -352,4 +351,11 @@ fbb_get_bytes(IO_HANDLE h)
         return 0;
     }
     return ring->bytes;
+}
+
+void
+fbb_set_log_level(char *level)
+{
+    blb_set_log_level(level);
+    bw_set_log_level_str(level);
 }

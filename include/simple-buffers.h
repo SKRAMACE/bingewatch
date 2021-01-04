@@ -12,22 +12,16 @@
 
 #define BF_BLOCKFILL 0x1
 
-// Continuous Variable-Size Buffer
-struct rbiom_args {
-    size_t buf_bytes;
-    size_t block_bytes;
-    uint16_t align;
-};
-
+extern const IOM *rb_machine;
 const IOM *get_rb_machine();
-void rbiom_update_defaults(struct rbiom_args *rb);
-const IOM *new_rb_machine(IO_HANDLE *h, size_t buffer_size, size_t block_size);
+IO_HANDLE new_rb_machine();
 
 // Deprecated
 size_t rb_get_size(IO_HANDLE h);
 size_t rb_get_bytes(IO_HANDLE h);
 
 // Fixed-size Block Buffer
+extern const IOM *fbb_machine;
 struct fbbiom_args {
     size_t buf_bytes;
     size_t block_bytes;
@@ -36,7 +30,7 @@ struct fbbiom_args {
 };
 
 const IOM *get_fbb_machine();
-const IOM *new_fbb_machine(IO_HANDLE *h, size_t buffer_size, size_t block_size);
+IO_HANDLE new_fbb_machine(size_t buffer_size, size_t block_size);
 
 // Deprecated
 size_t fbb_get_size(IO_HANDLE h);

@@ -18,7 +18,7 @@ struct soapy_args_t {
     char id_str[128];
 };
 
-const IOM * get_soapy_rx_machine();
+IOM *get_soapy_rx_machine();
 IO_HANDLE new_soapy_rx_machine(const char *id);
 void soapy_set_gains(IO_HANDLE h, float lna, float tia, float pga);
 void soapy_set_rx(IO_HANDLE h, double freq, double rate, double bandwidth);

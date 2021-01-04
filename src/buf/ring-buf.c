@@ -15,26 +15,34 @@
 
 #define DEFAULT_BUF_BYTES 100*MB
 #define DEFAULT_BLK_BYTES   10*MB
-#define DEFAULT_ALIGN 4
+#define DEFAULT_ALIGN 1*MB
+#define DEFAULT_REALLOC 16
 
 static size_t default_buf_bytes = DEFAULT_BUF_BYTES;
 static size_t default_blk_bytes = DEFAULT_BLK_BYTES;
-static uint16_t default_align = DEFAULT_ALIGN;
 
-static IOM *ring_buffer_machine = NULL;
+const IOM *rb_machine;
+static IOM *_ring_buffer_machine = NULL;
 
 // Ring descriptor
 struct ring_t {
     IO_DESC _b;  // Generic buffer
 
-    size_t size;         // Total capacity in all blocks (in bytes)
-    size_t bytes;        // Total data written in all blocks (in bytes)
-    int flush;
-    struct __block_t *wp;  // Pointer to next write (empty) block
-    struct __block_t *rp;  // Pointer to next read (filled) block
-    pthread_mutex_t wlock; // Mutex lock for writing to this ring
-    pthread_mutex_t rlock; // Mutex lock for reading to this ring
-    size_t block_size;   // Bytes per block
+    size_t size;            // Total buffer capacity in bytes
+    size_t bytes;           // Total stored data in bytes
+
+    struct __block_t *wp;   // Pointer to next write-block
+    pthread_mutex_t wlock;  // Write lock
+
+    struct __block_t *rp;   // Pointer to next read-block
+    pthread_mutex_t rlock;  // Read lock
+
+    int flush;              // Flag used to keep reading available until the buffer is empty
+
+    size_t block_size;      // Bytes per block
+    size_t block_align;     // Block size alignment
+    size_t block_realloc;   // Number of blocks to realloc
+    size_t high_water_mark; // Upper limit for bytes
 };
 
 static pthread_mutex_t rb_machine_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -52,6 +60,8 @@ buf_read(IO_FILTER_ARGS)
         *IO_FILTER_ARGS_BYTES = 0;
         return IO_ERROR;
     }
+
+    char *data = IO_FILTER_ARGS_BUF; 
 
     // Lock reading from this buffer
     pthread_mutex_lock(&ring->rlock);
@@ -85,14 +95,17 @@ buf_read(IO_FILTER_ARGS)
             _bytes = remaining;
         }
 
-        memcpy(IO_FILTER_ARGS_BUF, b->data, _bytes);
+        memcpy(data, b->data, _bytes);
         remaining -= _bytes;
-        IO_FILTER_ARGS_BUF += _bytes;
+        data += _bytes;
         bytes_read += _bytes;
+
+        if (partial_read) {
+            memmove(b->data, b->data + _bytes, b->bytes - _bytes);
+        }
 
         pthread_mutex_lock(lock);
         if (partial_read) {
-            memmove(b->data, b->data + _bytes, b->bytes - _bytes);
             b->bytes -= _bytes;
         } else {
             b->bytes -= _bytes;
@@ -119,6 +132,30 @@ buf_read(IO_FILTER_ARGS)
     return IO_SUCCESS;
 }
 
+static int
+rb_data_init(struct ring_t *ring, size_t min_bytes)
+{
+    double n_d = (double)min_bytes / (double)ring->block_align;
+    size_t n_i = (size_t)n_d;
+
+    // Round up to the nearest 'aligned' byte count
+    size_t block_size = (n_d != (double)n_i) ? (n_i + 1) * ring->block_align : n_i * ring->block_align;
+        
+    pthread_mutex_lock(&ring->wlock);
+    pthread_mutex_lock(&ring->rlock);
+    size_t bytes = block_data_fastalloc(ring->_b.pool, ring->wp, block_size);
+    ring->block_size = block_size;
+    ring->size += bytes;
+    pthread_mutex_unlock(&ring->rlock);
+    pthread_mutex_unlock(&ring->wlock);
+
+    if (bytes == 0) {
+        return IO_ERROR;
+    }
+
+    return IO_SUCCESS;
+}
+
 // Write to a buffer
 static int
 buf_write(IO_FILTER_ARGS)
@@ -133,12 +170,23 @@ buf_write(IO_FILTER_ARGS)
         return IO_ERROR;
     }
 
+    if (ring->size == 0) {
+        trace("First write: allocating write buffers");
+        if (rb_data_init(ring, *IO_FILTER_ARGS_BYTES) != IO_SUCCESS) {
+            error("Failed to allocate write buffers");
+            return IO_ERROR;
+        }
+    }
+
+    char *data = IO_FILTER_ARGS_BUF; 
+
     // Lock writing to this buffer
     pthread_mutex_lock(&ring->wlock);
     struct __block_t *b = ring->wp;
 
     // Initialize write vars
     pthread_mutex_t *lock = &ring->_b.lock;
+
     size_t written = 0;
     size_t remaining = *IO_FILTER_ARGS_BYTES;
 
@@ -147,7 +195,7 @@ buf_write(IO_FILTER_ARGS)
         size_t _bytes = (remaining < b->size) ? remaining : b->size;
 
         char *tmp_b_data = b->data;
-        char *tmp_f_buf = IO_FILTER_ARGS_BUF;
+        char *tmp_f_buf = data;
         size_t tmp_r = _bytes;
         while (tmp_r > 0) {
             *tmp_b_data = *tmp_f_buf;
@@ -156,35 +204,38 @@ buf_write(IO_FILTER_ARGS)
             tmp_r--;
         }
 
-        //memcpy(b->data, IO_FILTER_ARGS_BUF, _bytes);
         remaining -= _bytes;
-        IO_FILTER_ARGS_BUF += _bytes;
+        data += _bytes;
         written += _bytes;
 
         pthread_mutex_lock(lock);
         b->bytes = _bytes;
+        struct __block_t *next = b->next;
+        pthread_mutex_unlock(lock);
+
 
         // Expand the size of the ring if necessary
-        struct __block_t *next = b->next;
         if (!BLOCK_EMPTY(next)) {
-            // Add enough space + 1 extra block
-            size_t block_count = (remaining / ring->block_size) + 1;
+            trace("Out of space: allocating more write buffers");
 
-            struct __block_t *add = block_list_alloc(ring->_b.pool, block_count);
-            block_data_fastalloc(ring->_b.pool, add, ring->block_size);
+            pthread_mutex_lock(lock);
+            ring->block_realloc *= 2;
+            size_t n_blocks = ring->block_realloc;
+            pthread_mutex_unlock(lock);
 
-            // Link head of new block segment into ring
-            b->next = add;
-
-            // Get last block
-            while (add->next) {
-                add = add->next;
+            struct __block_t *add_head = block_list_alloc(ring->_b.pool, n_blocks);
+            struct __block_t *add_tail = add_head;
+            while (add_tail->next) {
+                add_tail = add_tail->next;
             }
 
-            // Link tail of new block segment into ring
-            add->next = next;
+            block_data_fastalloc(ring->_b.pool, add_head, ring->block_size);
+
+            pthread_mutex_lock(lock);
+            b->next = add_head;
+            add_tail->next = next;
+            pthread_mutex_unlock(lock);
         }
-        pthread_mutex_unlock(lock);
 
         b = b->next;
     }
@@ -212,128 +263,61 @@ destroy_rb_machine(IO_HANDLE h)
     machine_destroy_desc(h);
 }
 
-static inline void
-sanitize_args(struct rbiom_args *args)
-{
-    pthread_mutex_lock(&rb_machine_lock);
-    // Set null values to defaults
-    if (0 == args->buf_bytes) {
-        //printf("Using default buffer size: %zu\n", default_buf_bytes);
-        args->buf_bytes = default_buf_bytes;
-    }
-    if (0 == args->block_bytes) {
-        //printf("Using default block size: %zu\n", default_blk_bytes);
-        args->block_bytes = default_blk_bytes;
-    }
-    if (0 == args->align) {
-        //printf("Using default alignment: %#x\n", default_align);
-        args->align = default_align;
-    }
-
-    // Verify that alignment is a power of 2
-    uint16_t i = 15;
-    while (1) {
-        if ((1 << i) == args->align) {
-            break;
-        }
-
-        if (i > 0) {
-            i--;
-            continue;
-        }
-
-        //printf("Invalid alignment, using default: %#x\n", default_align);
-        args->align = default_align;
-        break;
-    }
-
-    // Verify that block bytes are properly aligned
-    
-    size_t a = (size_t)args->align;
-    size_t adjust = (a - (args->block_bytes & (a - 1))) & (a - 1);
-    if (adjust > 0) {
-        //printf("Invalid block alignment, adjusting from %zu to %zu\n", args->block_bytes, args->block_bytes + adjust);
-        args->block_bytes += adjust;
-    }
-    pthread_mutex_unlock(&rb_machine_lock);
-}
-
-#define MACHINE_CRATE_IMPL() \
-    POOL *p = create_subpool(alloc);\
-    if (!p) { printf("ERROR: Filed to create memory pool\n"); return 0; }\
-
 static IO_HANDLE
 create_buffer(void *arg)
 {
+    IO_HANDLE h = 0;
+
     // Create a new pool for this buffer
-    POOL *p = create_subpool(ring_buffer_machine->alloc);
+    POOL *p = create_subpool(_ring_buffer_machine->alloc);
     if (!p) {
-        printf("ERROR: Failed to create memory pool\n");
+        error("Failed to create memory pool");
         return 0;
     }
 
     // Create a new buffer descriptor
     struct ring_t *ring = pcalloc(p, sizeof(struct ring_t));
     if (!ring) {
-        printf("ERROR: Failed to allocate %#zx bytes for ring descriptor\n", sizeof(struct ring_t));
-        pfree(p);
-        return 0;
-    }
-
-    // Block arithmetic
-    struct rbiom_args *args = (struct rbiom_args *)arg;
-    sanitize_args(args);
-
-    size_t bytes = args->buf_bytes;
-    size_t block_size = args->block_bytes;
-    size_t block_count = bytes / block_size;
-    if ((block_count * block_size) < bytes) {
-        block_count++;
+        error("Failed to allocate memory");
+        goto free_and_return;
     }
 
     // Create block descriptors
-    struct __block_t *blocks = block_list_alloc(p, block_count);
+    struct __block_t *blocks = block_list_alloc(p, DEFAULT_REALLOC);
     if (!blocks) {
-        printf("ERROR: Failed to create new buffer\n");
-        pfree(p);
-        return 0;
-    }
-
-    // Create block data
-    if (block_data_fastalloc(p, blocks, block_size) != IO_SUCCESS) {
-        printf("ERROR: Failed to create new buffer\n");
-        pfree(p);
-        return 0;
+        error("Failed to create descriptor");
+        goto free_and_return;
     }
 
     forge_ring(blocks);
-
-    ring->block_size = block_size;
     ring->wp = blocks;
     ring->rp = blocks;
+    ring->block_align = DEFAULT_ALIGN;
+    ring->block_realloc = DEFAULT_REALLOC;
+
     pthread_mutex_init(&ring->wlock, NULL);
     pthread_mutex_init(&ring->rlock, NULL);
 
-    if (machine_desc_init(p, ring_buffer_machine, (IO_DESC *)ring) != IO_SUCCESS) {
-        pfree(p);
-        return 0;
+    if (machine_desc_init(p, _ring_buffer_machine, (IO_DESC *)ring) != IO_SUCCESS) {
+        error("Failed to initialize mechine descriptor");
+        goto free_and_return;
     }
 
-    if (!filter_read_init(p, "_buf", buf_read, (IO_DESC *)ring)) {
-        printf("ERROR: Failed to initialize read filter\n");
-        pfree(p);
-        return 0;
+    if (!filter_read_init(p, "ring_buf_r", buf_read, (IO_DESC *)ring)) {
+        error("Failed to initialize read filter");
+        goto free_and_return;
     }
 
-    if (!filter_write_init(p, "_buf", buf_write, (IO_DESC *)ring)) {
-        printf("ERROR: Failed to initialize write filter\n");
-        pfree(p);
-        return 0;
+    if (!filter_write_init(p, "ring_buf_w", buf_write, (IO_DESC *)ring)) {
+        error("Failed to initialize write filter");
+        goto free_and_return;
     }
 
-    IO_HANDLE h;
     machine_register_desc((IO_DESC *)ring, &h);
+    return h;
 
+free_and_return:
+    pfree(p);
     return h;
 }
 
@@ -358,18 +342,6 @@ stop_buffer(IO_HANDLE h)
     }
 }
 
-void
-rbiom_update_defaults(struct rbiom_args *rb)
-{
-    sanitize_args(rb);
-
-    pthread_mutex_lock(&rb_machine_lock);
-    default_buf_bytes = rb->buf_bytes;
-    default_blk_bytes = rb->block_bytes;
-    default_align = rb->align;
-    pthread_mutex_unlock(&rb_machine_lock);
-}
-
 static void *
 get_metrics(IO_HANDLE h)
 {
@@ -388,7 +360,7 @@ get_metrics(IO_HANDLE h)
 const IOM *
 get_rb_machine()
 {
-    IOM *machine = ring_buffer_machine;
+    IOM *machine = _ring_buffer_machine;
     if (!machine) {
         machine = machine_register("ring_buffer");
 
@@ -398,19 +370,17 @@ get_rb_machine()
         machine->destroy = destroy_rb_machine;
         machine->metrics = get_metrics;
 
-        ring_buffer_machine = machine;
+        _ring_buffer_machine = machine;
+        rb_machine = machine;
     }
     return (const IOM *)machine;
 }
 
-const IOM *
-new_rb_machine(IO_HANDLE *h, size_t buffer_size, size_t block_size)
+IO_HANDLE
+new_rb_machine(IO_HANDLE *h)
 {
     const IOM *rb_machine = get_rb_machine();
-
-    struct rbiom_args rb_args = {buffer_size, block_size};
-    *h = rb_machine->create(&rb_args);
-    return rb_machine;
+    return rb_machine->create(NULL);
 }
 
 size_t
@@ -424,7 +394,30 @@ rb_get_size(IO_HANDLE h)
 }
 
 void
+rb_set_alignment(IO_HANDLE h, uint32_t align)
+{
+    struct ring_t *ring = (struct ring_t *)machine_get_desc(h);
+    if (!ring) {
+        error("Machine %d not found", h);
+    }
+
+    ring->block_align = align;
+}
+
+void
+rb_set_high_water_mark(IO_HANDLE h, size_t bytes)
+{
+    struct ring_t *ring = (struct ring_t *)machine_get_desc(h);
+    if (!ring) {
+        error("Machine %d not found", h);
+    }
+
+    ring->high_water_mark = bytes;
+}
+
+void
 rb_set_log_level(char *level)
 {
+    blb_set_log_level(level);
     bw_set_log_level_str(level);
 }
