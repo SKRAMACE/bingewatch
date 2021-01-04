@@ -377,7 +377,7 @@ get_rb_machine()
 }
 
 IO_HANDLE
-new_rb_machine(IO_HANDLE *h)
+new_rb_machine()
 {
     const IOM *rb_machine = get_rb_machine();
     return rb_machine->create(NULL);
