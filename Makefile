@@ -97,7 +97,7 @@ TEST = \
 $(LIB): $(SRC)
 	$(CC) $(CFLAGS) $^ $(INC) $(LDFLAGS) $(LCFLAGS) -o $@
 
-libbingewatch_soapy: $(LIB) soapy-machine.c
+libbingewatch_soapy: $(LIB) soapy-machine.c lime-machine.c
 	$(CC) $(CFLAGS) $^ $(INC) $(LDFLAGS) $(LCFLAGS) -o $@
 
 libbingewatch_uhd: $(LIB) uhd-machine.c

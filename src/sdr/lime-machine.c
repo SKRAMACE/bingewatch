@@ -1,3 +1,10 @@
+#include "soapy.h"
+#include "sdrs.h"
+
+#define LOGEX_TAG "BW-LIME"
+#include "logging.h"
+#include "bw-log.h"
+
 void
 lime_set_gains(IO_HANDLE h, float lna, float tia, float pga)
 {

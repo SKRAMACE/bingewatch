@@ -1,5 +1,3 @@
-#include <SoapySDR/Device.h>
-#include <SoapySDR/Formats.h>
 #include <stdio.h> //printf
 #include <stdlib.h> //free
 #include <string.h>
@@ -9,6 +7,7 @@
 #include "filter.h"
 #include "sdr-machine.h"
 #include "sdrs.h"
+#include "soapy.h"
 
 #define LOGEX_TAG "BW-SOAPY"
 #include "logging.h"
@@ -31,37 +30,9 @@ struct soapy_api_t {
     SDR_API _sdr;
 };
 
-enum soapy_antennas_e {
-    LIME_MINI_LNAH,
-};
-
 struct soapy_device_t {
     struct sdr_device_t _sdr;
 };
-
-struct soapy_channel_t {
-    struct sdr_channel_t _sdr;
-    SoapySDRDevice *sdr;
-    SoapySDRStream *rx;
-    enum soapy_antennas_e antenna;
-    int error_counter;
-    float tia_gain;
-    float pga_gain;
-    double expected_timestamp;
-    double ns_per_sample;
-};
-
-static struct soapy_channel_t *
-soapy_get_channel(IO_HANDLE h)
-{
-    struct machine_desc_t *d = machine_get_desc(h);
-    if (!d) {
-        error("Soapy channel %d not found", h);
-        return NULL;
-    }
-
-    return (struct soapy_channel_t *)d;
-}
 
 static void
 set_vars(POOL *p, void *args) {
@@ -540,6 +511,18 @@ new_soapy_rx_machine(const char *id)
     IOM *machine = get_soapy_rx_machine();
 
     return sdr_create(machine, (void *)id);
+}
+
+struct soapy_channel_t *
+soapy_get_channel(IO_HANDLE h)
+{
+    struct machine_desc_t *d = machine_get_desc(h);
+    if (!d) {
+        error("Soapy channel %d not found", h);
+        return NULL;
+    }
+
+    return (struct soapy_channel_t *)d;
 }
 
 void
