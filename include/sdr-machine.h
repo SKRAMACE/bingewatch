@@ -3,12 +3,6 @@
 
 #include <memex.h>
 
-enum sdr_chan_direction_e {
-    SDR_CHAN_NOINIT,
-    SDR_CHAN_RX,
-    SDR_CHAN_TX,
-};
-
 struct sdr_channel_t;
 struct sdr_device_t;
 
@@ -33,24 +27,28 @@ typedef struct sdr_api_t {
 
 typedef void (*sdr_chan_fn)(struct sdr_channel_t *);
 
+enum sdr_chan_state_e {
+    SDR_CHAN_NOINIT,
+    SDR_CHAN_READY,
+    SDR_CHAN_ERROR,
+};
+
 struct sdr_channel_t {
-    POOL *pool;
-    IO_HANDLE handle;
-    char in_use;
-    char error;
+    IO_DESC _d;
+
+    struct sdr_device_t *device;
 
     double freq;
     double rate;
     double bandwidth;
     float gain;
-    enum sdr_chan_direction_e dir;
-    char init;
-    struct io_desc *io;
-    pthread_mutex_t lock;
+
+    enum sdr_chan_state_e state;
+
+    //char init;
+    //char error;
 
     sdr_chan_fn destroy_channel_impl;
-
-    struct sdr_channel_t *next;
 
     void *_impl;
 };
@@ -65,7 +63,11 @@ struct sdr_device_t {
     POOL *pool;
 
     void *hw;
-    struct sdr_channel_t *channels;
+
+    struct sdr_channel_t **channels;
+    int n_chan;
+    int chan_len;
+
     sdr_device_fn destroy_device_impl;
     struct sdr_device_t *next;
     void *_impl;
@@ -73,8 +75,6 @@ struct sdr_device_t {
 
 void sdr_init_machine_functions(IOM *machine);
 void sdr_init_api_functions(IOM *machine, SDR_API *api);
-const struct sdr_device_t *sdr_get_device(IO_HANDLE h);
-struct sdr_channel_t *sdr_get_channel(IO_HANDLE h, const struct sdr_device_t *dev);
-IO_HANDLE sdr_create(const IOM *machine, void *arg);
+IO_HANDLE sdr_create(IOM *machine, void *arg);
 
 #endif

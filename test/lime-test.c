@@ -52,6 +52,9 @@ run_read_test()
     printf("\tPASS\n");
 
 do_return:
+    soapy_rx_machine->stop(lime);
+    soapy_rx_machine->destroy(lime);
+
     if (buf) {
         free(buf);
     }
@@ -62,11 +65,12 @@ do_return:
 int
 main(int nargs, char *argv[])
 {
-    soapy_set_log_level("trace"); 
+    soapy_set_log_level("error"); 
 
     fmt_rootdir("/tmp");
     printf("outdir: %s\n", rootdir);
 
+    run_read_test();
     run_read_test();
 
     if (rootdir) {

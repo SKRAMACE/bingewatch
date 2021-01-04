@@ -54,9 +54,13 @@ struct soapy_channel_t {
 static struct soapy_channel_t *
 soapy_get_channel(IO_HANDLE h)
 {
-    const struct sdr_device_t *dev = sdr_get_device(h);
-    struct sdr_channel_t *chan = sdr_get_channel(h, dev);
-    return (struct soapy_channel_t *)chan;
+    struct machine_desc_t *d = machine_get_desc(h);
+    if (!d) {
+        error("Soapy channel %d not found", h);
+        return NULL;
+    }
+
+    return (struct soapy_channel_t *)d;
 }
 
 static void
@@ -147,17 +151,23 @@ read_data_from_hw(IO_FILTER_ARGS)
 {
     // Dereference channel from filter object
     struct soapy_channel_t *chan = (struct soapy_channel_t *)IO_FILTER_ARGS_FILTER->obj;
+    struct sdr_channel_t *sdr = (struct sdr_channel_t *)chan;
 
-    if (chan->_sdr.error) {
+    switch (sdr->state) {
+    case SDR_CHAN_ERROR:
         return IO_ERROR;
-    }
-
-    if (!chan->_sdr.init) {
+    case SDR_CHAN_NOINIT:
         if (soapy_channel_init(chan) != IO_SUCCESS) {
             error("Failed to init soapy channel");
             return IO_ERROR;
         }
-        chan->_sdr.init = 1;
+        sdr->state = SDR_CHAN_READY;
+        break;
+    case SDR_CHAN_READY:
+        break;
+    default:
+        error("Unknown sdr channel state \"%d\"", sdr->state);
+        return IO_ERROR;
     }
 
     float complex *data = (float complex *)IO_FILTER_ARGS_BUF;
@@ -181,8 +191,10 @@ read_data_from_hw(IO_FILTER_ARGS)
         int diff = (int)(timeNs - expected);
         chan->expected_timestamp = (double)timeNs + (double)samples_read * chan->ns_per_sample;
 
+        trace("expected: %zd, actual: %zd, diff: %d, samples: %d", expected, timeNs, diff, samples_read);
         if (diff < -1 || diff > 1) {
-            error("data read clock mismatch: %d", diff);
+            error("data read clock mismatch: %d: lost %zd samples",
+                diff, (size_t)((double)diff/chan->ns_per_sample));
             goto error_return;
         }
 
@@ -362,6 +374,8 @@ create_channel(POOL *p, struct sdr_device_t *dev, void *args)
     }
 
     chan->sdr = dev->hw;
+    chan->_sdr.destroy_channel_impl = destroy_soapy_channel;
+
     return (struct sdr_channel_t *)chan;
 }
 
@@ -416,13 +430,18 @@ soapy_set_val(IO_HANDLE h, int var, double val)
     int ret = 1;
 
     struct soapy_channel_t *soapy = soapy_get_channel(h);
-    struct sdr_channel_t *chan = &soapy->_sdr;
+    if (!soapy) {
+        goto failure;
+    }
 
-    while (chan->in_use) {
+    struct sdr_channel_t *chan = &soapy->_sdr;
+    IO_DESC *d = (IO_DESC *)chan;
+
+    while (d->in_use) {
         continue;
     }
 
-    pthread_mutex_lock(&chan->lock);
+    pthread_mutex_lock(&d->lock);
     switch (var) {
     case SOAPY_VAR_FREQ:
         chan->freq = val; break;
@@ -432,10 +451,10 @@ soapy_set_val(IO_HANDLE h, int var, double val)
         chan->bandwidth = val; break;
     default:
         error("Unknown Var (%d)", var);
-        goto failure;
+        goto unlock_failure;
     }
 
-    if (!chan->init) {
+    if (SDR_CHAN_NOINIT == chan->state) {
         goto success;
     }
 
@@ -459,21 +478,22 @@ soapy_set_val(IO_HANDLE h, int var, double val)
         break;
     default:
         error("Unknown Var (%d)", var);
-        goto failure;
+        goto unlock_failure;
     }
 
     SoapySDRDevice_activateStream(soapy->sdr, soapy->rx, 0, 0, 0);
 
 success:
-    pthread_mutex_unlock(&chan->lock);
+    pthread_mutex_unlock(&d->lock);
     return 0;
 
 soapy_error:
     error("Soapy Error: %s\n", SoapySDRDevice_lastError());
-    chan->error = 1;
+    chan->state = SDR_CHAN_ERROR;
 
+unlock_failure:
+    pthread_mutex_unlock(&d->lock);
 failure:
-    pthread_mutex_unlock(&chan->lock);
     return 1;
 }
 
@@ -495,7 +515,7 @@ soapy_rx_set_bandwidth(IO_HANDLE h, double bandwidth)
     return soapy_set_val(h, SOAPY_VAR_BANDWIDTH, bandwidth);
 }
 
-const IOM *
+IOM *
 get_soapy_rx_machine()
 {
     IOM *machine = _soapy_rx_machine;
@@ -511,30 +531,25 @@ get_soapy_rx_machine()
         _soapy_rx_machine = machine;
         soapy_rx_machine = machine;
     }
-    return (const IOM *)machine;
+    return machine;
 }
 
 IO_HANDLE
 new_soapy_rx_machine(const char *id)
 {
-    const IOM *machine = get_soapy_rx_machine();
+    IOM *machine = get_soapy_rx_machine();
 
     return sdr_create(machine, (void *)id);
-}
-
-void
-soapy_set_gains(IO_HANDLE h, float lna, float tia, float pga)
-{
-    struct soapy_channel_t *chan = soapy_get_channel(h);
-    chan->_sdr.gain = lna;
-    chan->tia_gain = tia;
-    chan->pga_gain = pga;
 }
 
 void
 soapy_set_rx(IO_HANDLE h, double freq, double rate, double bandwidth)
 {
     struct soapy_channel_t *chan = soapy_get_channel(h);
+    if (!chan) {
+        return;
+    }
+
     chan->_sdr.freq = freq;
     chan->_sdr.rate = rate;
     chan->_sdr.bandwidth = bandwidth;
