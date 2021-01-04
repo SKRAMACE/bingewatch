@@ -11,17 +11,16 @@ lime_set_gains(IO_HANDLE h, float lna, float tia, float pga)
     chan->pga_gain = pga;
 }
 
-IO_HANDLE
-new_lime_rx_machine()
-{
-    return new_soapy_rx_machine("lime");
-}
-
-
 void
 lime_set_rx(IO_HANDLE h, double freq, double rate, double bandwidth)
 {
     soapy_set_rx(h, freq, rate, bandwidth);
+}
+
+IO_HANDLE
+new_lime_rx_machine()
+{
+    return new_soapy_rx_machine("lime");
 }
 
 void
