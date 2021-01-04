@@ -123,7 +123,7 @@ lime-test: $(TEST) sdr-rx-machine.c soapy-machine.c
 
 tests: buffer-test file-test stream-test
 
-all: $(LIB) $(LIB)_soapy $(LIB)_uhd
+all: $(LIB) $(LIB)_soapy
 
 install: $(LIB)
 	@./install
