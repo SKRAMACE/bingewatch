@@ -1,33 +1,18 @@
 #include <stdlib.h>
 #include <stdio.h>
-#include <uuid/uuid.h>
+#include <envex.h>
 
 #include "sdrs.h"
+#include "test.h"
 #include "logging.h"
 
-static char *rootdir = NULL;
-
-static void
-fmt_rootdir(char *root)
-{
-    if (!rootdir) {
-        rootdir = malloc(1024);
-    }
-
-    uuid_t binuuid;
-    uuid_generate_random(binuuid);
-
-    char uuid[37];
-    uuid_unparse(binuuid, uuid);
-
-    snprintf(rootdir, 1024, "%s/%s-%s", root, "bingewatch-test", uuid);
-}
+#define LOGEX_TAG "LIME-TEST"
+#include <logex-main.h>
 
 static int
-run_read_test()
+restart_test()
 {
     int ret = 1;
-    printf("%s\n", __FUNCTION__);
 
     double freq = 1000000000.0;
     double samp_rate = 30720000.0;
@@ -36,24 +21,69 @@ run_read_test()
     size_t bytes = (size_t)(samp_rate * .01);
     char *buf = malloc(bytes);
 
-    IO_HANDLE lime = new_soapy_rx_machine("lime");
-    soapy_set_rx(lime, freq, samp_rate, bandwidth);
+    IO_HANDLE lime = 0;
+    for (int i = 0; i < 2; i++) {
+        lime = new_lime_rx_machine();
+        lime_set_rx(lime, freq, samp_rate, bandwidth);
+
+        size_t remaining = (size_t)samp_rate;
+        while (remaining) {
+            size_t b = (bytes < remaining) ? bytes : remaining;
+            if (lime_rx_machine->read(lime, buf, &b) != IO_SUCCESS) {
+                goto do_return;
+            }
+            remaining -= b;
+        }
+
+        lime_rx_machine->stop(lime);
+        lime_rx_machine->destroy(lime);
+        lime = 0;
+    }
+
+    ret = 0;
+
+do_return:
+    if (lime > 0) {
+        lime_rx_machine->stop(lime);
+        lime_rx_machine->destroy(lime);
+    }
+
+    if (buf) {
+        free(buf);
+    }
+
+    return ret;
+}
+
+static int
+read_test()
+{
+    int ret = 1;
+
+    double freq = 1000000000.0;
+    double samp_rate = 30720000.0;
+    double bandwidth = samp_rate;
+
+    size_t bytes = (size_t)(samp_rate * .01);
+    char *buf = malloc(bytes);
+
+    IO_HANDLE lime = new_lime_rx_machine();
+    lime_set_rx(lime, freq, samp_rate, bandwidth);
 
     size_t remaining = (size_t)samp_rate;
     while (remaining) {
         size_t b = (bytes < remaining) ? bytes : remaining;
-        if (soapy_rx_machine->read(lime, buf, &b) != IO_SUCCESS) {
+        if (lime_rx_machine->read(lime, buf, &b) != IO_SUCCESS) {
             goto do_return;
         }
         remaining -= b;
     }
 
     ret = 0;
-    printf("\tPASS\n");
 
 do_return:
-    soapy_rx_machine->stop(lime);
-    soapy_rx_machine->destroy(lime);
+    lime_rx_machine->stop(lime);
+    lime_rx_machine->destroy(lime);
 
     if (buf) {
         free(buf);
@@ -65,15 +95,17 @@ do_return:
 int
 main(int nargs, char *argv[])
 {
-    soapy_set_log_level("error"); 
+    char *log_level;
+    ENVEX_TOSTR_UPPER(log_level, "BW_TEST_UNIT_LOG_LEVEL", "error");
+    set_log_level_str(log_level);
 
-    fmt_rootdir("/tmp");
-    printf("outdir: %s\n", rootdir);
+    lime_set_log_level("warn"); 
 
-    run_read_test();
-    run_read_test();
+    test_setup();
 
-    if (rootdir) {
-        free(rootdir);
-    }
+    test_add(restart_test);
+    test_add(read_test);
+
+    test_run();
+    test_cleanup();
 }

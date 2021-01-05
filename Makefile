@@ -42,6 +42,7 @@ endif
 TEST_CFLAGS=\
     -ggdb \
     -DBINGEWATCH_LOCAL \
+    -Itest \
 
 .IGNORE: clean
 .PHONY: install clean uninstall all uhd soapy
@@ -93,6 +94,7 @@ TEST = \
 	filter.c \
     bw-log.c \
     bw-util.c \
+    test/test.c \
 
 $(LIB): $(SRC)
 	$(CC) $(CFLAGS) $^ $(INC) $(LDFLAGS) $(LCFLAGS) -o $@
@@ -118,7 +120,7 @@ stream-test: $(TEST) stream.c segment.c file-machine.c $(FILTERS) $(BUF)
 sock-test: $(TEST) socket-machine.c
 	$(CC) $(TEST_CFLAGS) test/sock-test.c $^ $(INC) -o test/bin/sock-test $(TESTLIBS)
 
-lime-test: $(TEST) sdr-rx-machine.c soapy-machine.c
+lime-test: $(TEST) sdr-rx-machine.c soapy-machine.c lime-machine.c
 	$(CC) $(TEST_CFLAGS) test/$@.c $^ $(INC) -o test/bin/$@ $(TESTLIBS) $(SDRLIBS)
 
 tests: buffer-test file-test stream-test
