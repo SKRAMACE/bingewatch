@@ -52,6 +52,7 @@ new_lime_rx_machine()
 
     if (!_lime_rx_machine) {
         _lime_rx_machine = (IOM *)soapy_rx_machine;
+        lime_rx_machine = _lime_rx_machine;
     }
 
     return h;
