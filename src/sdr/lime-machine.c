@@ -24,6 +24,24 @@ lime_set_rx(IO_HANDLE h, double freq, double rate, double bandwidth)
     soapy_set_rx(h, freq, rate, bandwidth);
 }
 
+int
+lime_rx_set_freq(IO_HANDLE h, double freq);
+{
+    soapy_rx_set_freq(h, freq);
+}
+
+int
+lime_rx_set_samp_rate(IO_HANDLE h, double samp_rate);
+{
+    soapy_rx_set_samp_rate(h, samp_rate);
+}
+
+int
+lime_rx_set_bandwidth(IO_HANDLE h, double bandwidth);
+{
+    soapy_rx_set_bandwidth(h, bandwidth);
+}
+
 IO_HANDLE
 new_lime_rx_machine()
 {
