@@ -5,6 +5,9 @@
 #include "logging.h"
 #include "bw-log.h"
 
+const IOM *lime_rx_machine;
+static IOM *_lime_rx_machine = NULL;
+
 void
 lime_set_gains(IO_HANDLE h, float lna, float tia, float pga)
 {
@@ -45,7 +48,13 @@ lime_rx_set_bandwidth(IO_HANDLE h, double bandwidth)
 IO_HANDLE
 new_lime_rx_machine()
 {
-    return new_soapy_rx_machine("lime");
+    IO_HANDLE h = new_soapy_rx_machine("lime");
+
+    if (!_lime_rx_machine) {
+        _lime_rx_machine = (IOM *)soapy_rx_machine;
+    }
+
+    return h;
 }
 
 void

@@ -27,6 +27,8 @@ int soapy_rx_set_samp_rate(IO_HANDLE h, double samp_rate);
 int soapy_rx_set_bandwidth(IO_HANDLE h, double bandwidth);
 
 /* LIME SDR SUPPORT */
+extern const IOM *lime_rx_machine;
+
 void lime_set_gains(IO_HANDLE h, float lna, float tia, float pga);
 void lime_set_rx(IO_HANDLE h, double freq, double rate, double bandwidth);
 int lime_rx_set_freq(IO_HANDLE h, double freq);
