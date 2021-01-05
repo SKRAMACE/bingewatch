@@ -14,7 +14,7 @@
 #include "bw-log.h"
 
 #define SOAPY_SERIAL_LEN 32
-#define MAX_ERROR_COUNT 32
+#define MAX_ERROR_COUNT 0
 
 enum soapy_var_e {
     SOAPY_VAR_FREQ,
@@ -56,7 +56,7 @@ destroy_soapy_channel(struct sdr_channel_t *chan)
 }
 
 static int
-soapy_channel_init(struct soapy_channel_t *chan)
+soapy_channel_set(struct soapy_channel_t *chan)
 {
     // Set antenna
     int ret = 0;
@@ -110,9 +110,53 @@ soapy_channel_init(struct soapy_channel_t *chan)
         return IO_ERROR;
     }
 
+    return IO_SUCCESS;
+}
+
+static int
+soapy_channel_start(struct soapy_channel_t *chan)
+{
+    int ret = IO_ERROR;
+
+    trace("Starting channel %d:%d", chan->_sdr.device->id, chan->_sdr._d.handle);
+
     // Start Streaming
     SoapySDRDevice_activateStream(chan->sdr, chan->rx, 0, 0, 0);
 
+    double ts = 0.01;
+    size_t n_samp = (size_t)(chan->_sdr.rate * ts);
+    char *data = malloc(n_samp * sizeof(float complex));
+    void *buffs[] = {data};
+    int flags;
+    long long timeNs = 0;
+    int diff = 0;
+
+    double timeout = 2;
+
+    // Read data until clock is synchronized
+    while (timeNs == 0 || diff < -1 || diff > 1) {
+        int samples_read = SoapySDRDevice_readStream(chan->sdr, chan->rx, buffs, n_samp, &flags, &timeNs, 100000);
+        if (samples_read < 0) {
+            int e = samples_read;
+            const char *e_msg = SoapySDRDevice_lastError();
+            error("SoapySDRDevice_readStream() error %d: %s", e, e_msg);
+            return IO_ERROR;
+        }
+
+        long long expected = (long long)(chan->expected_timestamp + .5);
+        int diff = (int)(timeNs - expected);
+        chan->expected_timestamp = (double)timeNs + (double)samples_read * chan->ns_per_sample;
+
+        timeout -= ts;
+        if (timeout <= 0.0) {
+            error("Channel %d:%d failed to synchronize timing", chan->_sdr.device->id, chan->_sdr._d.handle);
+            goto do_return;
+        }
+    }
+    ret = IO_SUCCESS;
+
+do_return:
+    free(data);
     return IO_SUCCESS;
 }
 
@@ -128,12 +172,19 @@ read_data_from_hw(IO_FILTER_ARGS)
     case SDR_CHAN_ERROR:
         return IO_ERROR;
     case SDR_CHAN_NOINIT:
-        if (soapy_channel_init(chan) != IO_SUCCESS) {
-            error("Failed to init soapy channel");
+        if (soapy_channel_set(chan) != IO_SUCCESS) {
+            error("Failed to set soapy channel");
             return IO_ERROR;
         }
+
+        if (soapy_channel_start(chan) != IO_SUCCESS) {
+            error("Failed to start soapy channel");
+            return IO_ERROR;
+        }
+
         sdr->state = SDR_CHAN_READY;
         break;
+
     case SDR_CHAN_READY:
         break;
     default:
