@@ -24,6 +24,11 @@ static size_t default_blk_bytes = DEFAULT_BLK_BYTES;
 const IOM *rb_machine;
 static IOM *_ring_buffer_machine = NULL;
 
+enum rb_state_e {
+    RB_STATE_NOINIT=0,
+    RB_STATE_READY,
+};
+
 // Ring descriptor
 struct ring_t {
     IO_DESC _b;  // Generic buffer
@@ -43,6 +48,9 @@ struct ring_t {
     size_t block_align;     // Block size alignment
     size_t block_realloc;   // Number of blocks to realloc
     size_t high_water_mark; // Upper limit for bytes
+    size_t min_return_size; // If there are fewer bytes, return 0
+
+    enum rb_state_e state;  // Buffer state
 };
 
 static pthread_mutex_t rb_machine_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -75,6 +83,10 @@ buf_read(IO_FILTER_ARGS)
 
     while (remaining % IO_FILTER_ARGS_ALIGN != 0) {
         remaining--;
+    }
+
+    if (ring->min_return_size > ring->bytes) {
+        remaining = 0;      
     }
 
     while (remaining) {
@@ -170,12 +182,13 @@ buf_write(IO_FILTER_ARGS)
         return IO_ERROR;
     }
 
-    if (ring->size == 0) {
+    if (RB_STATE_NOINIT == ring->state) {
         trace("First write: allocating write buffers");
-        if (rb_data_init(ring, *IO_FILTER_ARGS_BYTES) != IO_SUCCESS) {
+        if (rb_data_init(ring, *IO_FILTER_ARGS_BYTES) < IO_SUCCESS) {
             error("Failed to allocate write buffers");
             return IO_ERROR;
         }
+        ring->state = RB_STATE_READY;
     }
 
     char *data = IO_FILTER_ARGS_BUF; 
@@ -383,6 +396,17 @@ new_rb_machine()
     return rb_machine->create(NULL);
 }
 
+void
+rb_set_min_return_size(IO_HANDLE h, size_t bytes)
+{
+    struct ring_t *ring = (struct ring_t *)machine_get_desc(h);
+    if (!ring) {
+        error("Machine %d not found", h);
+    }
+
+    ring->min_return_size = bytes;
+}
+
 size_t
 rb_get_size(IO_HANDLE h)
 {
@@ -391,6 +415,21 @@ rb_get_size(IO_HANDLE h)
         return 0;
     }
     return ring->size;
+}
+
+size_t
+rb_get_bytes(IO_HANDLE h)
+{
+    struct ring_t *ring = (struct ring_t *)machine_get_desc(h);
+    if (!ring) {
+        return 0;
+    }
+
+    pthread_mutex_lock(&ring->rlock);
+    size_t bytes = ring->bytes;
+    pthread_mutex_unlock(&ring->rlock);
+
+    return bytes;
 }
 
 void
