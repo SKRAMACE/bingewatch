@@ -38,7 +38,7 @@ create_null(void *arg)
     pthread_mutex_init(&desc->lock, NULL);
     desc->pool = p;
 
-    if (machine_desc_init(p, null_machine, desc) != IO_SUCCESS) {
+    if (machine_desc_init(p, null_machine, desc) < IO_SUCCESS) {
         pfree(p);
         return 0;
     }

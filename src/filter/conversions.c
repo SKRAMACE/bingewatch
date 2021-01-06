@@ -244,12 +244,12 @@ create_conversion_filter(void *alloc, const char *name, int from_fmt, int to_fmt
     desc->tmp = NULL;
     desc->precision = data_precision;
 
-    if (get_iq_desc(from_fmt, &desc->from) != IO_SUCCESS) {
+    if (get_iq_desc(from_fmt, &desc->from) < IO_SUCCESS) {
         fprintf(stderr, "ERROR: Unsupported IQ Datatype (%d)\n", from_fmt);
         return NULL;
     }
 
-    if (get_iq_desc(to_fmt, &desc->to) != IO_SUCCESS) {
+    if (get_iq_desc(to_fmt, &desc->to) < IO_SUCCESS) {
         fprintf(stderr, "ERROR: Unsupported IQ Datatype (%d)\n", to_fmt);
         return NULL;
     }

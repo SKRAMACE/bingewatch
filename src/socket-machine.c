@@ -352,7 +352,7 @@ create_sock(void *arg)
 
     sock->handle = request_handle(_socket_machine);
 
-    if (init_filters(sock) != IO_SUCCESS) {
+    if (init_filters(sock) < IO_SUCCESS) {
         printf("ERROR: Failed to initialize filters\n");
         pfree(p);
         return 0;

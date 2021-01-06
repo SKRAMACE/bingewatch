@@ -311,7 +311,7 @@ create_buffer(void *arg)
     pthread_mutex_init(&ring->wlock, NULL);
     pthread_mutex_init(&ring->rlock, NULL);
 
-    if (machine_desc_init(p, _ring_buffer_machine, (IO_DESC *)ring) != IO_SUCCESS) {
+    if (machine_desc_init(p, _ring_buffer_machine, (IO_DESC *)ring) < IO_SUCCESS) {
         error("Failed to initialize mechine descriptor");
         goto free_and_return;
     }

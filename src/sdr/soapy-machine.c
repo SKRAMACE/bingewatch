@@ -172,12 +172,12 @@ read_data_from_hw(IO_FILTER_ARGS)
     case SDR_CHAN_ERROR:
         return IO_ERROR;
     case SDR_CHAN_NOINIT:
-        if (soapy_channel_set(chan) != IO_SUCCESS) {
+        if (soapy_channel_set(chan) < IO_SUCCESS) {
             error("Failed to set soapy channel");
             return IO_ERROR;
         }
 
-        if (soapy_channel_start(chan) != IO_SUCCESS) {
+        if (soapy_channel_start(chan) < IO_SUCCESS) {
             error("Failed to start soapy channel");
             return IO_ERROR;
         }

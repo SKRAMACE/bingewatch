@@ -293,14 +293,14 @@ sdr_create(IOM *machine, void *arg)
         return 0;
     }
 
-    if (machine_desc_init(channel_pool, machine, (IO_DESC *)chan) != IO_SUCCESS) {
+    if (machine_desc_init(channel_pool, machine, (IO_DESC *)chan) < IO_SUCCESS) {
         error("Failed to initialize mechine descriptor");
         pfree(device_pool);
         pfree(channel_pool);
         return 0;
     }
 
-    if (init_filters(chan, device, api->rx_filter) != IO_SUCCESS) {
+    if (init_filters(chan, device, api->rx_filter) < IO_SUCCESS) {
         error("Failed to initialize sdr rx filter\n");
         pfree(device_pool);
         pfree(channel_pool);

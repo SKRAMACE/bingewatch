@@ -472,7 +472,7 @@ create_file(void *arg)
 
     desc->flags = args->flags;
 
-    if (machine_desc_init(p, _file_machine, (IO_DESC *)desc) != IO_SUCCESS) {
+    if (machine_desc_init(p, _file_machine, (IO_DESC *)desc) < IO_SUCCESS) {
         pfree(p);
         return 0;
     }

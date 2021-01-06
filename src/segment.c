@@ -156,7 +156,7 @@ read_from_source(struct io_segment_t *seg, IO_DESC *src, char *buf, size_t *byte
         seg_info(seg, "Read complete");
         seg->do_complete = 1;
 
-    } else if (IO_SUCCESS != status) {
+    } else if (status < IO_SUCCESS) {
         seg_error(seg, "Read error (%d)", status);
         SEGMENT_ERROR(seg);
         stop_segment(seg);
@@ -182,7 +182,8 @@ write_to_dest(struct io_segment_t *seg, IO_DESC *dst, char *buf, size_t *bytes)
             seg_info(seg, "Write complete");
             seg->do_complete = 1;
             break;
-        } else if (IO_SUCCESS != status) {
+
+        } else if (status < IO_SUCCESS) {
             seg_error(seg, "Write error (%d)", status);
             SEGMENT_ERROR(seg);
             stop_segment(seg);

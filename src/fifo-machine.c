@@ -241,7 +241,7 @@ create_fifo(void *arg)
     set_input_str(p, args->fname, &desc->fname);
     desc->flags = args->flags;
 
-    if (machine_desc_init(p, _fifo_machine, (IO_DESC *)desc) != IO_SUCCESS) {
+    if (machine_desc_init(p, _fifo_machine, (IO_DESC *)desc) < IO_SUCCESS) {
         pfree(p);
         return 0;
     }

@@ -145,7 +145,7 @@ read_data_from_hw(IO_FILTER_ARGS)
     }
 
     if (!chan->_sdr.init) {
-        if (uhd_channel_init(chan) != IO_SUCCESS) {
+        if (uhd_channel_init(chan) < IO_SUCCESS) {
             printf("ERROR: Failed to init channel\n");
             return IO_ERROR;
         }

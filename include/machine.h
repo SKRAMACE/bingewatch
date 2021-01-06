@@ -18,14 +18,25 @@
 
 typedef int IO_HANDLE;
 
+enum bw_status {
+    BW_SUCCESS=0,
+    BW_ERROR,
+};
+
 /***** Creating Machines *****/
 enum io_status {
-    IO_SUCCESS = 0,         // Universal success
-    IO_ERROR,               // Generic error
-    IO_COMPLETE,            // Treated like a success, but triggers a "stop"
-    IO_CONTINUE,            // Used to commuincate iterations
-    IO_BREAK,               // Used to break an iteration
-    IO_IMPLEMENTATION=100,
+    // Error
+    IO_ERROR=-1,            // Generic error
+
+    // Success
+    IO_SUCCESS=0,           // Generic success
+    IO_COMPLETE,            // Machine has completed it's operations
+    IO_NODATA,              // No data was available
+    IO_CONTINUE,            // Continue to next iteration
+    IO_BREAK,               // Stop iterating
+
+    // Custom Implementation
+    IO_IMPL=100,
 };
 
 // Function Types

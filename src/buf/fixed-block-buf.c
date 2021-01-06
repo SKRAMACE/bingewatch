@@ -254,7 +254,7 @@ create_buffer(void *arg)
     }
 
     // Create block data
-    if (block_data_fastalloc(p, blocks, block_size) != IO_SUCCESS) {
+    if (block_data_fastalloc(p, blocks, block_size) < IO_SUCCESS) {
         printf("ERROR: Failed to create new buffer\n");
         pfree(p);
         return 0;
@@ -271,7 +271,7 @@ create_buffer(void *arg)
     pthread_mutex_init(&ring->wlock, NULL);
     pthread_mutex_init(&ring->rlock, NULL);
 
-    if (machine_desc_init(p, _fbb_machine, (IO_DESC *)ring) != IO_SUCCESS) {
+    if (machine_desc_init(p, _fbb_machine, (IO_DESC *)ring) < IO_SUCCESS) {
         pfree(p);
         return 0;
     }
