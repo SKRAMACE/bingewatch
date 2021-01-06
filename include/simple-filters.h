@@ -1,7 +1,11 @@
 #ifndef __SIMPLE_FILTERS_H__
 #define __SIMPLE_FILTERS_H__
 
-#include <filter.h>
+#ifdef BINGEWATCH_LOCAL
+#include "filter.h"
+#else
+#include <bingewatch/filter.h>
+#endif
 
 enum iq_data_type_e {
     IQ_UNSUPPORTED = -1,
