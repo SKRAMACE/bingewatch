@@ -29,7 +29,7 @@ restart_test()
         size_t remaining = (size_t)samp_rate;
         while (remaining) {
             size_t b = (bytes < remaining) ? bytes : remaining;
-            if (lime_rx_machine->read(lime, buf, &b) != IO_SUCCESS) {
+            if (lime_rx_machine->read(lime, buf, &b) < IO_SUCCESS) {
                 goto do_return;
             }
             remaining -= b;
@@ -73,7 +73,7 @@ read_test()
     size_t remaining = (size_t)samp_rate;
     while (remaining) {
         size_t b = (bytes < remaining) ? bytes : remaining;
-        if (lime_rx_machine->read(lime, buf, &b) != IO_SUCCESS) {
+        if (lime_rx_machine->read(lime, buf, &b) < IO_SUCCESS) {
             goto do_return;
         }
         remaining -= b;
