@@ -22,7 +22,7 @@ byte_count_limiter(IO_FILTER_ARGS)
     struct generic_counter_t *limit = (struct generic_counter_t *)IO_FILTER_ARGS_FILTER->obj;
 
     if (dir == IOF_READ) { 
-        int ret = CALL_NEXT_FILTER();
+        ret = CALL_NEXT_FILTER();
         if (ret != IO_SUCCESS) {
             return ret;
         }
