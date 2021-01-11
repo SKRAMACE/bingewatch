@@ -108,8 +108,8 @@ libbingewatch_uhd: $(LIB) uhd-machine.c
 %.o: %.c
 	$(CC) $(CFLAGS) $(INC) -I/usc/local/include -Werror -ggdb -c $^
 
-buffer-test: $(TEST) $(BUF)
-	$(CC) $(TEST_CFLAGS) test/simple-buffer-test.c $^ $(INC) -o test/bin/simple-buffer-test $(TESTLIBS)
+ring-buffer-test: $(TEST) $(BUF)
+	$(CC) $(TEST_CFLAGS) test/ring-buffer-test.c $^ $(INC) -o test/bin/$@ $(TESTLIBS)
 
 file-test: $(TEST) file-machine.c null-machine.c
 	$(CC) $(TEST_CFLAGS) test/file-test.c $^ $(INC) -o test/bin/file-test $(TESTLIBS)
