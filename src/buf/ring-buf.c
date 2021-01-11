@@ -226,7 +226,6 @@ buf_write(IO_FILTER_ARGS)
         struct __block_t *next = b->next;
         pthread_mutex_unlock(lock);
 
-
         // Expand the size of the ring if necessary
         if (!BLOCK_EMPTY(next)) {
             trace("Out of space: allocating more write buffers");
@@ -237,16 +236,21 @@ buf_write(IO_FILTER_ARGS)
             pthread_mutex_unlock(lock);
 
             struct __block_t *add_head = block_list_alloc(ring->_b.pool, n_blocks);
+            size_t added_bytes = block_data_fastalloc(ring->_b.pool, add_head, ring->block_size);
+            if (added_bytes == 0) {
+                pfree(ring->_b.pool, add_head);
+                break;
+            }
+
             struct __block_t *add_tail = add_head;
             while (add_tail->next) {
                 add_tail = add_tail->next;
             }
 
-            block_data_fastalloc(ring->_b.pool, add_head, ring->block_size);
-
             pthread_mutex_lock(lock);
             b->next = add_head;
             add_tail->next = next;
+            ring->size += added_bytes;
             pthread_mutex_unlock(lock);
         }
 
@@ -272,7 +276,6 @@ buf_write(IO_FILTER_ARGS)
 static void
 destroy_rb_machine(IO_HANDLE h)
 {
-    printf("Destroying buffer %d\n", h);
     machine_destroy_desc(h);
 }
 

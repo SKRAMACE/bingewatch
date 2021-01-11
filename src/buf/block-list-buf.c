@@ -4,6 +4,7 @@
 #include <inttypes.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <sys/sysinfo.h>
 
 #include "machine.h"
 #include "filter.h"
@@ -63,23 +64,46 @@ block_list_alloc(POOL *p, size_t block_count) {
  */
 size_t
 block_data_alloc(POOL *p, void *block, size_t bytes_per_block) {
+    if (!block) {
+        return 0;
+    }
+
+    struct sysinfo info;
+    if (sysinfo(&info) != 0) {
+        warn("sysinfo failed: Not fast-allocating block buffer");
+        return 0;
+    }
+
+    if (bytes_per_block > info.freeram) {
+        warn("Insufficient memory: Not fast-allocating block buffer");
+        return 0;
+    }
+
     int n_blocks = 0;
 
     struct __block_t *b = (struct __block_t *)block;
     do {
-        b->data = palloc(p, bytes_per_block);
-        b->bytes = 0;
-        b->size = bytes_per_block;
-
-        n_blocks++;
+        int n = n_blocks + 1;
+        if (n * bytes_per_block < info.freeram) {
+            b->data = palloc(p, bytes_per_block);
+            b->bytes = 0;
+            b->size = bytes_per_block;
+            n_blocks++;
+        }
         b = b->next;
     } while (b && (b != block));
 
+    // Print Trace
     char full_bytestr[64];
     char block_bytestr[64];
     size_t_fmt(full_bytestr, 64, n_blocks * bytes_per_block);
     size_t_fmt(block_bytestr, 64, bytes_per_block);
     trace("Allocating %sB (%sB * %d blocks)", full_bytestr, block_bytestr, n_blocks);
+
+    struct __block_t *final_next = b;
+    b = (struct __block_t *)block;
+    b[n_blocks - 1].next = final_next;
+
     return n_blocks * bytes_per_block;
 }
 
@@ -92,22 +116,37 @@ block_data_fastalloc(POOL *p, void *block, size_t bytes_per_block) {
         return 0;
     }
 
+    struct sysinfo info;
+    if (sysinfo(&info) != 0) {
+        warn("sysinfo failed: Not fast-allocating block buffer");
+        return 0;
+    }
+
+    if (bytes_per_block > info.freeram) {
+        warn("Insufficient memory: Not fast-allocating block buffer");
+        return 0;
+    }
+
     // Calculate size
     struct __block_t *b = (struct __block_t *)block;
     int n_blocks = 0;
     do {
-        n_blocks++;
+        int n = n_blocks + 1;
+        if (n * bytes_per_block < info.freeram) {
+            n_blocks++;
+        }
         b = b->next;
     } while (b && (b != block));
 
+    // Trace Printing
     char full_bytestr[64];
     char block_bytestr[64];
     size_t_fmt(full_bytestr, 64, n_blocks * bytes_per_block);
     size_t_fmt(block_bytestr, 64, bytes_per_block);
-    size_t bytes = n_blocks * bytes_per_block;
     trace("Fast-allocating %sB (%sB * %d blocks)", full_bytestr, block_bytestr, n_blocks);
 
     // Allocate memory
+    size_t bytes = n_blocks * bytes_per_block;
     char *buf = palloc(p, bytes);
     if (!buf) {
         error("Failed to allocate bytes for block buffer", bytes);
@@ -115,13 +154,19 @@ block_data_fastalloc(POOL *p, void *block, size_t bytes_per_block) {
     }
 
     // Partition buffer into blocks
+    struct __block_t *final_next = b;
     b = (struct __block_t *)block;
-    while (b && !b->data) {
+    for (int n = 0; n < n_blocks; n++) {
         b->data = buf;
         b->bytes = 0;
         b->size = bytes_per_block;
         buf += bytes_per_block;
-        b = b->next;
+
+        if (n_blocks - n > 1) {
+            b = b->next;
+        } else {
+            b->next = final_next;
+        }
     }
 
     return bytes;
