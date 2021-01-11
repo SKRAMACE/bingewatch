@@ -369,7 +369,7 @@ create_device(POOL *p, void *args)
     struct soapy_device_t *dev = pcalloc(p, sizeof(struct soapy_device_t));
     if (!dev) {
         error("Failed to allocate %zu bytes for sdr device\n", sizeof(struct soapy_device_t));
-        pfree(p);
+        free_pool(p);
         return 0;
     }
 
