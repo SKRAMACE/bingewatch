@@ -82,7 +82,7 @@ free_machine_desc(struct machine_desc_t *desc) {
     }
 
     pthread_mutex_destroy(&desc->lock);
-    pfree(desc->pool);
+    free_pool(desc->pool);
 }
 
 // Free the descriptor 

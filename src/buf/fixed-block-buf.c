@@ -230,7 +230,7 @@ create_buffer(void *arg)
     struct ring_t *ring = pcalloc(p, sizeof(struct ring_t));
     if (!ring) {
         printf("ERROR: Failed to allocate %#zx bytes for ring descriptor\n", sizeof(struct ring_t));
-        pfree(p);
+        free_pool(p);
         return 0;
     }
 
@@ -249,14 +249,14 @@ create_buffer(void *arg)
     struct __block_t *blocks = block_list_alloc(p, block_count);
     if (!blocks) {
         printf("ERROR: Failed to create new buffer\n");
-        pfree(p);
+        free_pool(p);
         return 0;
     }
 
     // Create block data
     if (block_data_fastalloc(p, blocks, block_size) < IO_SUCCESS) {
         printf("ERROR: Failed to create new buffer\n");
-        pfree(p);
+        free_pool(p);
         return 0;
     }
 
@@ -272,19 +272,19 @@ create_buffer(void *arg)
     pthread_mutex_init(&ring->rlock, NULL);
 
     if (machine_desc_init(p, _fbb_machine, (IO_DESC *)ring) < IO_SUCCESS) {
-        pfree(p);
+        free_pool(p);
         return 0;
     }
 
     if (!filter_read_init(p, "_buf", buf_read, (IO_DESC *)ring)) {
         printf("ERROR: Failed to initialize read filter\n");
-        pfree(p);
+        free_pool(p);
         return 0;
     }
 
     if (!filter_write_init(p, "_buf", buf_write, (IO_DESC *)ring)) {
         printf("ERROR: Failed to initialize write filter\n");
-        pfree(p);
+        free_pool(p);
         return 0;
     }
 

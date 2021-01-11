@@ -330,7 +330,7 @@ create_buffer(void *arg)
     return h;
 
 free_and_return:
-    pfree(p);
+    free_pool(p);
     return h;
 }
 
