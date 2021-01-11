@@ -290,7 +290,7 @@ segment_run(void *arg)
         }
     }
 
-    pfree(pool);
+    free_pool(pool);
     cleanup_segment(seg);
     pthread_exit(NULL);
 }

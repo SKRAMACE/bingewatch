@@ -99,7 +99,7 @@ free_sock(struct sock_desc_t *sock) {
     }
 
     pthread_mutex_destroy(&sock->lock);
-    pfree(sock->pool);
+    free_pool(sock->pool);
 }
 
 // Free the sock descriptor 
@@ -300,7 +300,7 @@ init_filters(struct sock_desc_t *sock)
     return IO_SUCCESS;
 
 failure:
-    pfree(fpool);
+    free_pool(fpool);
     return IO_ERROR;
 }
 
@@ -318,7 +318,7 @@ create_sock(void *arg)
     struct sock_desc_t *sock = pcalloc(p, sizeof(struct sock_desc_t));
     if (!sock) {
         printf("ERROR: Failed to allocate %#zx bytes for sock descriptor\n", sizeof(struct sock_desc_t));
-        pfree(p);
+        free_pool(p);
         return 0;
     }
 
@@ -354,7 +354,7 @@ create_sock(void *arg)
 
     if (init_filters(sock) < IO_SUCCESS) {
         printf("ERROR: Failed to initialize filters\n");
-        pfree(p);
+        free_pool(p);
         return 0;
     }
 

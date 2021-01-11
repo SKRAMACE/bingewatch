@@ -231,7 +231,7 @@ create_fifo(void *arg)
 
     if (!desc) {
         printf("ERROR: Failed to allocate %#zx bytes for fifo descriptor\n", sizeof(struct fifo_desc_t));
-        pfree(p);
+        free_pool(p);
         return 0;
     }
 
@@ -242,19 +242,19 @@ create_fifo(void *arg)
     desc->flags = args->flags;
 
     if (machine_desc_init(p, _fifo_machine, (IO_DESC *)desc) < IO_SUCCESS) {
-        pfree(p);
+        free_pool(p);
         return 0;
     }
 
     if (!filter_read_init(p, "_fifo", fifo_read, (IO_DESC *)desc)) {
         printf("ERROR: Failed to initialize read filter\n");
-        pfree(p);
+        free_pool(p);
         return 0;
     }
 
     if (!filter_write_init(p, "_fifo", fifo_write, (IO_DESC *)desc)) {
         printf("ERROR: Failed to initialize write filter\n");
-        pfree(p);
+        free_pool(p);
         return 0;
     }
 

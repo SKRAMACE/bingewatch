@@ -415,7 +415,7 @@ stream_cleanup()
         
         void *destroy_me = st;
         st = st->next;
-        pfree(destroy_me);
+        free_pool(destroy_me);
     }
 
     streams = NULL;

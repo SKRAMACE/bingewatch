@@ -31,7 +31,7 @@ create_null(void *arg)
     struct machine_desc_t *desc = pcalloc(p, sizeof(struct machine_desc_t));
     if (!desc) {
         printf("ERROR: Failed to allocate %#zx bytes for file descriptor\n", sizeof(struct machine_desc_t));
-        pfree(p);
+        free_pool(p);
         return 0;
     }
 
@@ -39,19 +39,19 @@ create_null(void *arg)
     desc->pool = p;
 
     if (machine_desc_init(p, null_machine, desc) < IO_SUCCESS) {
-        pfree(p);
+        free_pool(p);
         return 0;
     }
 
     if (!filter_read_init(p, "_null", null_read, desc)) {
         printf("ERROR: Failed to initialize read filter\n");
-        pfree(p);
+        free_pool(p);
         return 0;
     }
 
     if (!filter_write_init(p, "_null", null_write, desc)) {
         printf("ERROR: Failed to initialize write filter\n");
-        pfree(p);
+        free_pool(p);
         return 0;
     }
 

@@ -161,7 +161,7 @@ cleanup_device(struct sdr_device_t *device)
         dp->next = d->next;
     }
 
-    pfree(d->pool);
+    free_pool(d->pool);
 }
 
 static void
@@ -271,7 +271,7 @@ sdr_create(IOM *machine, void *arg)
     struct sdr_device_t *device = api->device(device_pool, arg);
     if (!device) {
         error("Failed to create sdr rx device descriptor\n");
-        pfree(device_pool);
+        free_pool(device_pool);
         return 0;
     }
     pthread_mutex_init(&device->lock, NULL);
@@ -281,29 +281,29 @@ sdr_create(IOM *machine, void *arg)
     POOL *channel_pool = create_subpool(machine->alloc);
     if (!channel_pool) {
         error("Failed to create sdr rx channel memory pool");
-        pfree(device_pool);
+        free_pool(device_pool);
         return 0;
     }
 
     struct sdr_channel_t *chan = api->channel(channel_pool, device, arg);
     if (!chan) {
         error("Failed to create new sdr rx channel");
-        pfree(device_pool);
-        pfree(channel_pool);
+        free_pool(device_pool);
+        free_pool(channel_pool);
         return 0;
     }
 
     if (machine_desc_init(channel_pool, machine, (IO_DESC *)chan) < IO_SUCCESS) {
         error("Failed to initialize mechine descriptor");
-        pfree(device_pool);
-        pfree(channel_pool);
+        free_pool(device_pool);
+        free_pool(channel_pool);
         return 0;
     }
 
     if (init_filters(chan, device, api->rx_filter) < IO_SUCCESS) {
         error("Failed to initialize sdr rx filter\n");
-        pfree(device_pool);
-        pfree(channel_pool);
+        free_pool(device_pool);
+        free_pool(channel_pool);
         return 0;
     }
 

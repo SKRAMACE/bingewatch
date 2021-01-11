@@ -448,7 +448,7 @@ create_file(void *arg)
 
     if (!desc) {
         printf("ERROR: Failed to allocate %#zx bytes for file descriptor\n", sizeof(struct file_desc_t));
-        pfree(p);
+        free_pool(p);
         return 0;
     }
 
@@ -473,19 +473,19 @@ create_file(void *arg)
     desc->flags = args->flags;
 
     if (machine_desc_init(p, _file_machine, (IO_DESC *)desc) < IO_SUCCESS) {
-        pfree(p);
+        free_pool(p);
         return 0;
     }
 
     if (!filter_read_init(p, "_file", file_read, (IO_DESC *)desc)) {
         printf("ERROR: Failed to initialize read filter\n");
-        pfree(p);
+        free_pool(p);
         return 0;
     }
 
     if (!filter_write_init(p, "_file", file_write, (IO_DESC *)desc)) {
         printf("ERROR: Failed to initialize write filter\n");
-        pfree(p);
+        free_pool(p);
         return 0;
     }
 
