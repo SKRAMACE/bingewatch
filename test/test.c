@@ -3,6 +3,7 @@
 #include <uuid/uuid.h>
 #include <sys/time.h>
 #include <envex.h>
+#include <memex.h>
 
 #include "test.h"
 
@@ -11,8 +12,9 @@
 
 #define TEST_QUEUE_ALLOC_LEN 10
 
-const char *bw_test_rootdir;
+char *bw_test_rootdir;
 static char *_rootdir = NULL;
+static POOL *testpool = NULL;
 
 struct test_t {
     test_fn fn;
@@ -29,11 +31,26 @@ static void
 fmt_rootdir(char *root, char *group, char *tag)
 {
     if (!_rootdir) {
-        _rootdir = malloc(1024);
+        _rootdir = palloc(testpool, 1024);
     }
 
     snprintf(_rootdir, 1024, "%s/%s-%s", root, group, tag);
     bw_test_rootdir = _rootdir;
+}
+
+size_t
+fill_float_data(size_t len, float **data)
+{
+    size_t bytes = len * sizeof(float);
+    float *x = palloc(testpool, bytes);
+
+    int i = 0;
+    for (; i < 100; i++) {
+        x[i] = (float)i;
+    }
+
+    *data = x;
+    return bytes;
 }
 
 int
@@ -49,7 +66,7 @@ test_setup()
     ENVEX_TOSTR(root, "BW_TEST_ROOT", "/tmp");
 
     char *group;
-    ENVEX_TOSTR(root, "BW_TEST_GROUP", "bingewatch-test");
+    ENVEX_TOSTR(group, "BW_TEST_GROUP", "bingewatch-test");
 
     char tag[1024];
     if (ENVEX_EXISTS("BW_TEST_TEST")) {
@@ -72,6 +89,9 @@ test_setup()
         uuid_generate_random(binuuid);
         uuid_unparse(binuuid, tag);
     }
+
+    testpool = create_pool();
+
     fmt_rootdir(root, group, tag);
 
     info("outdir: %s", _rootdir);
@@ -126,9 +146,6 @@ do_return:
 int
 test_cleanup()
 {
-    if (_rootdir) {
-        free(_rootdir);
-    }
-
+    free_pool(testpool);
     return 0;
 }

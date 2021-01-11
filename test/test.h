@@ -5,7 +5,7 @@
 
 typedef int (*test_fn)(void);
 
-extern const char *bw_test_rootdir;
+extern char *bw_test_rootdir;
 
 #define test_init_logging() {\
     char *__bw_test_log_level; \
@@ -15,6 +15,8 @@ extern const char *bw_test_rootdir;
 
 #define test_add(x) _test_add(x, #x)
 int _test_add(test_fn test, const char *name);
+
+size_t fill_float_data(size_t len, float **data);
 
 int test_run();
 int test_setup();
