@@ -100,8 +100,6 @@ static void *
 main_state_machine(void *args)
 {
     struct io_stream_t *st = (struct io_stream_t *)args;
-
-    machine_metrics_timer_start(1000);
     set_state(st, STREAM_READY);
 
     // Start segments
@@ -140,9 +138,9 @@ main_state_machine(void *args)
     for (s = 0; s < st->n_segment; s++) {
         IO_SEGMENT seg = st->segments[s];
         segment_join(seg);
+        segment_print_metrics(seg);
     }
 
-    machine_metrics_timer_stop();
     pthread_exit(NULL);
 }
 

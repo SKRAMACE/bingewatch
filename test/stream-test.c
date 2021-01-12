@@ -5,58 +5,31 @@
 #include <uuid/uuid.h>
 #include <memex.h>
 
-#include "logging.h"
 #include "simple-machines.h"
 #include "simple-buffers.h"
 #include "simple-filters.h"
+#include "logging.h"
 #include "stream.h"
+#include "test.h"
 
-static char *rootdir = NULL;
-
-static void
-fmt_rootdir(char *root)
-{
-    if (!rootdir) {
-        rootdir = malloc(1024);
-    }
-
-    uuid_t binuuid;
-    uuid_generate_random(binuuid);
-
-    char uuid[37];
-    uuid_unparse(binuuid, uuid);
-
-    snprintf(rootdir, 1024, "%s/%s-%s", root, "bingewatch-test", uuid);
-}
-
-static size_t
-fill_float_data(size_t len, float **data)
-{
-    size_t bytes = len * sizeof(float);
-    float *x = malloc(bytes);
-
-    int i = 0;
-    for (; i < 100; i++) {
-        x[i] = (float)i;
-    }
-
-    *data = x;
-    return bytes;
-}
+#define LOGEX_TAG "STREAM-TEST"
+#include <logex-main.h>
 
 static int
-run_stream_test(void *data, size_t bytes)
+stream_test()
 {
     int ret = 1;
-    printf("%s\n", __FUNCTION__);
+
+    float *data;
+    size_t bytes = fill_float_data(100, &data);
 
     char *infile = "stream_test_data";
     char *outfile = "stream_test_out";
     char *rdata = NULL;
 
     // Create file machines
-    IO_HANDLE in = new_file_machine(rootdir, infile, "float", FFILE_RW);
-    IO_HANDLE out = new_file_machine(rootdir, outfile, "float", FFILE_WRITE);
+    IO_HANDLE in = new_file_machine(bw_test_rootdir, infile, "float", FFILE_RW);
+    IO_HANDLE out = new_file_machine(bw_test_rootdir, outfile, "float", FFILE_WRITE);
 
     // Create stream
     IO_STREAM stream = new_stream();
@@ -66,7 +39,6 @@ run_stream_test(void *data, size_t bytes)
     size_t b = bytes;
     file_machine->write(in, data, &b);
     if (b != bytes) {
-        printf("\tFAIL: Write byte mismatch\n");
         goto do_return;
     }
 
@@ -77,22 +49,19 @@ run_stream_test(void *data, size_t bytes)
     //file_machine->destroy(out);
 
     // Read and compare
-    out = new_file_machine(rootdir, outfile, "float", FFILE_READ);
+    out = new_file_machine(bw_test_rootdir, outfile, "float", FFILE_READ);
     rdata = malloc(bytes);
     b = bytes;
     file_machine->read(out, rdata, &b);
     if (b != bytes) {
-        printf("\tFAIL: Read byte mismatch\n");
         goto do_return;
     }
 
     if (memcmp(data, rdata, bytes) != 0) {
-        printf("\tFAIL: Data mismatch\n");
         goto do_return;
     }
 
     ret = 0;
-    printf("\tPASS\n");
 
 do_return:
     if (rdata) {
@@ -103,18 +72,20 @@ do_return:
 }
 
 static int
-run_buffered_stream_test(void *data, size_t bytes)
+buffered_stream_test()
 {
     int ret = 1;
-    printf("%s\n", __FUNCTION__);
+
+    float *data;
+    size_t bytes = fill_float_data(100, &data);
 
     char *infile = "buffered_stream_test_data";
     char *outfile = "buffered_stream_test_out";
     char *rdata = NULL;
 
     // Create file machines
-    IO_HANDLE in = new_file_machine(rootdir, infile, "float", FFILE_RW);
-    IO_HANDLE out = new_file_machine(rootdir, outfile, "float", FFILE_WRITE);
+    IO_HANDLE in = new_file_machine(bw_test_rootdir, infile, "float", FFILE_RW);
+    IO_HANDLE out = new_file_machine(bw_test_rootdir, outfile, "float", FFILE_WRITE);
 
     // Create stream
     IO_STREAM stream = new_stream();
@@ -124,7 +95,6 @@ run_buffered_stream_test(void *data, size_t bytes)
     size_t b = bytes;
     file_machine->write(in, data, &b);
     if (b != bytes) {
-        printf("\tFAIL: Write byte mismatch\n");
         goto do_return;
     }
 
@@ -135,22 +105,19 @@ run_buffered_stream_test(void *data, size_t bytes)
     //file_machine->destroy(out);
 
     // Read and compare
-    out = new_file_machine(rootdir, outfile, "float", FFILE_READ);
+    out = new_file_machine(bw_test_rootdir, outfile, "float", FFILE_READ);
     rdata = malloc(bytes);
     b = bytes;
     file_machine->read(out, rdata, &b);
     if (b != bytes) {
-        printf("\tFAIL: Read byte mismatch\n");
         goto do_return;
     }
 
     if (memcmp(data, rdata, bytes) != 0) {
-        printf("\tFAIL: Data mismatch\n");
         goto do_return;
     }
 
     ret = 0;
-    printf("\tPASS\n");
 
 do_return:
     if (rdata) {
@@ -161,18 +128,20 @@ do_return:
 }
 
 static int
-run_multisegment_stream_test(void *data, size_t bytes)
+multisegment_stream_test()
 {
     int ret = 1;
-    printf("%s\n", __FUNCTION__);
+
+    float *data;
+    size_t bytes = fill_float_data(100, &data);
 
     char *infile = "buffered_stream_test_data";
     char *outfile = "buffered_stream_test_out";
     char *rdata = NULL;
 
     // Create file machines
-    IO_HANDLE in = new_file_machine(rootdir, infile, "float", FFILE_RW);
-    IO_HANDLE out = new_file_machine(rootdir, outfile, "float", FFILE_WRITE);
+    IO_HANDLE in = new_file_machine(bw_test_rootdir, infile, "float", FFILE_RW);
+    IO_HANDLE out = new_file_machine(bw_test_rootdir, outfile, "float", FFILE_WRITE);
 
     IO_HANDLE buf1 = new_rb_machine();
     IO_HANDLE buf2 = new_rb_machine();
@@ -187,7 +156,6 @@ run_multisegment_stream_test(void *data, size_t bytes)
     size_t b = bytes;
     file_machine->write(in, data, &b);
     if (b != bytes) {
-        printf("\tFAIL: Write byte mismatch\n");
         goto do_return;
     }
 
@@ -198,22 +166,19 @@ run_multisegment_stream_test(void *data, size_t bytes)
     //file_machine->destroy(out);
 
     // Read and compare
-    out = new_file_machine(rootdir, outfile, "float", FFILE_READ);
+    out = new_file_machine(bw_test_rootdir, outfile, "float", FFILE_READ);
     rdata = malloc(bytes);
     b = bytes;
     file_machine->read(out, rdata, &b);
     if (b != bytes) {
-        printf("\tFAIL: Read byte mismatch\n");
         goto do_return;
     }
 
     if (memcmp(data, rdata, bytes) != 0) {
-        printf("\tFAIL: Data mismatch\n");
         goto do_return;
     }
 
     ret = 0;
-    printf("\tPASS\n");
 
 do_return:
     if (rdata) {
@@ -224,10 +189,12 @@ do_return:
 }
 
 static int
-run_byte_count_stream_test(void *data, size_t bytes)
+byte_count_stream_test()
 {
     int ret = 1;
-    printf("%s\n", __FUNCTION__);
+
+    float *data;
+    size_t bytes = fill_float_data(100, &data);
 
     char *outfile = "byte_count_stream_test_out";
     char *rdata = NULL;
@@ -235,7 +202,7 @@ run_byte_count_stream_test(void *data, size_t bytes)
 
     // Create file machines
     IO_HANDLE in = new_file_read_machine("/dev/urandom");
-    IO_HANDLE out = new_file_machine(rootdir, outfile, "float", FFILE_WRITE);
+    IO_HANDLE out = new_file_machine(bw_test_rootdir, outfile, "float", FFILE_WRITE);
 
     IO_HANDLE buf1 = new_rb_machine();
     IO_HANDLE buf2 = new_rb_machine();
@@ -258,18 +225,16 @@ run_byte_count_stream_test(void *data, size_t bytes)
     //file_machine->destroy(out);
 
     // Read and compare
-    out = new_file_machine(rootdir, outfile, "float", FFILE_READ);
+    out = new_file_machine(bw_test_rootdir, outfile, "float", FFILE_READ);
     rdata = malloc(limit_bytes);
 
     size_t b = limit_bytes;
     file_machine->read(out, rdata, &b);
     if (b != limit_bytes) {
-        printf("\tFAIL: Read byte mismatch\n");
         goto do_return;
     }
 
     ret = 0;
-    printf("\tPASS\n");
 
 do_return:
     if (rdata) {
@@ -280,25 +245,26 @@ do_return:
 }
 
 static int
-run_stream_metrics_test(void *data, size_t bytes)
+stream_metrics_test()
 {
     int ret = 1;
-    printf("%s\n", __FUNCTION__);
+
+    float *data;
+    size_t bytes = fill_float_data(100, &data);
 
     char *outfile = "run_stream_metrics_test_out";
     char *rdata = NULL;
-    size_t limit_bytes = 1024 * 1024 * 1024;
 
     // Create file machines
     IO_HANDLE in = new_file_read_machine("/dev/urandom");
-    IO_HANDLE out = new_file_machine(rootdir, outfile, "float", FFILE_WRITE);
+    IO_HANDLE out = new_file_machine(bw_test_rootdir, outfile, "float", FFILE_WRITE);
 
     IO_HANDLE buf1 = new_rb_machine();
     IO_HANDLE buf2 = new_rb_machine();
 
     // Create byte counter
     POOL *p = create_pool();
-    IO_FILTER *limiter = create_byte_count_limit_filter(p, "limiter", limit_bytes);
+    IO_FILTER *limiter = create_time_limit_filter(p, "limiter", 5000);
     add_write_filter(buf1, limiter);
 
     // Create stream
@@ -307,29 +273,15 @@ run_stream_metrics_test(void *data, size_t bytes)
     io_stream_add_segment(stream, buf1, buf2, BW_NOFLAGS);
     io_stream_add_segment(stream, buf2, out, BW_NOFLAGS);
 
-    machine_metrics_enable(buf1);
-
     stream_enable_metrics(stream);
+
     start_stream(stream);
     join_stream(stream);
-    stream_print_metrics(stream);
 
     //file_machine->destroy(in);
     //file_machine->destroy(out);
 
-    // Read and compare
-    out = new_file_machine(rootdir, outfile, "float", FFILE_READ);
-    rdata = malloc(limit_bytes);
-
-    size_t b = limit_bytes;
-    file_machine->read(out, rdata, &b);
-    if (b != limit_bytes) {
-        printf("\tFAIL: Read byte mismatch\n");
-        goto do_return;
-    }
-
     ret = 0;
-    printf("\tPASS\n");
 
 do_return:
     if (rdata) {
@@ -342,22 +294,17 @@ do_return:
 int
 main(int nargs, char *argv[])
 {
-    fmt_rootdir("/tmp");
-    printf("outdir: %s\n", rootdir);
-    float *data;
-    size_t bytes = fill_float_data(100, &data);
+    test_init_logging(); 
 
-    run_stream_test(data, bytes);
-    run_buffered_stream_test(data, bytes);
-    run_multisegment_stream_test(data, bytes);
-    run_byte_count_stream_test(data, bytes);
-    run_stream_metrics_test(data, bytes);
+    test_setup();
 
-    if (data) {
-        free(data);
-    }
+    segment_set_log_level("trace");
+    test_add(stream_test);
+    test_add(buffered_stream_test);
+    test_add(multisegment_stream_test);
+    test_add(byte_count_stream_test);
+    test_add(stream_metrics_test);
 
-    if (rootdir) {
-        free(rootdir);
-    }
+    test_run();
+    test_cleanup();
 }

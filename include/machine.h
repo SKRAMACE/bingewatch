@@ -87,24 +87,55 @@ enum io_desc_state_e {
     IO_DESC_ERROR,
 };
 
-#define METRIC_HIST 60
-typedef void (*metrics_call)(void*, size_t);
+#define METRICS_CALC_FLAG           0x000000ff
+#define METRICS_CALC_TYPE_INST      0x00000001
+#define METRICS_CALC_TYPE_AVG       0x00000002
+#define METRICS_CALC_TYPE_FULL      0x00000004
+
+#define METRICS_FMT_FLAG            0x0000ff00
+#define METRICS_FMT_TYPE_ONELINE    0x00000100
+
+typedef void (*metrics_call)(void*, size_t, size_t);
+
+struct io_metrics_count_t {
+    size_t count;
+    size_t bytes;
+    size_t total_count;
+    size_t total_bytes;
+};
+
+struct io_metrics_calc_t {
+    struct timeval time;
+    double elapsed;
+    size_t total_bytes;
+
+    double data_rate;
+    double req_rate;
+    double avg_req_size;
+    double avg_rec_size;
+    double utilization;
+    size_t fill_level;
+};
+
 typedef struct io_metrics_data_t {
     pthread_mutex_t lock;
     metrics_call fn;
-    int _timer_signal;
+    POOL *pool;
+    int _update_signal;
+    int _print_signal;
 
-    size_t total_bytes;
+    struct io_metrics_count_t req;
+    struct io_metrics_count_t rec;
+
     struct timeval t_start;
+    struct timeval t_prev;
+    struct timeval t_cur;
     struct timeval t_stop;
 
-    int time_i;
-    size_t bytes_last;
-    size_t bytes[METRIC_HIST];
-    struct timeval time[METRIC_HIST];
-
-    double rate_1;
-    double rate_10;
+    size_t time_next;
+    struct io_metrics_calc_t *calc;
+    size_t n_calc;
+    size_t calc_len;
 
     void *__impl;
 } IO_METRICS;
@@ -164,8 +195,11 @@ void machine_desc_set_read_size(IO_HANDLE h, size_t len);
 void machine_desc_set_write_size(IO_HANDLE h, size_t len);
 void machine_metrics_enable();
 
-void machine_metrics_timer_start(size_t ms);
-void machine_metrics_timer_stop();
+void machine_metrics_start(size_t ms);
+void machine_metrics_stop();
+void machine_metrics_print_start(size_t ms);
+void machine_metrics_print_stop();
+
 struct io_metrics_t *machine_metrics_create(POOL *pool);
 
 void machine_register_desc(struct machine_desc_t *addme, IO_HANDLE *handle);
@@ -177,6 +211,9 @@ void machine_disable_write(IO_HANDLE h);
 void machine_disable_read(IO_HANDLE h);
 void machine_stop(IO_HANDLE h);
 void *machine_metrics(IO_HANDLE h);
+void machine_metrics_print(IO_METRICS *m);
+void machine_metrics_update(IO_METRICS *m);
+size_t machine_metrics_fmt(IO_METRICS *m, char *buf, size_t len, int flag);
 
 /***** Using Machines *****/
 IOM *machine_register(const char *name);

@@ -1,11 +1,11 @@
 #include <stdio.h>
 #include <pthread.h>
+#include <unistd.h>
 
 #include "machine.h"
 #include "segment.h"
 #include "bw-util.h"
 #include "stream-state.h"
-#include "stream-metrics.h"
 
 #define LOGEX_TAG "BW-SEG"
 #include "bw-log.h"
@@ -30,6 +30,12 @@ static char *group = "";
 
 static int segment_counter = 0;
 
+enum segment_direction_e {
+    SEG_DIR_IN,
+    SEG_DIR_OUT,
+    SEG_DIR_OUT1,
+};
+
 enum iostream_seg_ctrl_e {
     SEG_CTRL_TOP,
     SEG_CTRL_PROCEED,
@@ -53,8 +59,6 @@ struct io_segment_t {
     enum stream_state_e *state;    // Pointer to stream state
     char running;                  // This controls the main loop
     char do_complete;              // This controls the main loop
-
-    struct stream_metric_t metric;
 
     // Seg Management
     int id;                     // Numeric value for identification
@@ -99,52 +103,6 @@ stop_segment(struct io_segment_t *s)
     s->running = 0;
     s->do_complete = 0;
 }
-
-
-static void
-cleanup_segment(struct io_segment_t *seg)
-{
-    if (!seg) {
-        return;
-    }
-
-    // Get IOM references
-    const IOM *src = get_machine_ref(seg->in);
-    const IOM *dst = get_machine_ref(seg->out);
-    const IOM *dst1 = get_machine_ref(seg->out1);
-
-    pthread_mutex_lock(&seg->lock);
-
-    // TODO: Print metrics from this segment
-
-    pthread_mutex_unlock(&seg->lock);
-}
-
-
-/* REFERENCE 
-static void
-calculate_metrics(struct benchmark_t *bm, size_t bytes)
-{
-    if (!bm) {
-        return;
-    }
-
-    bm->total_bytes += bytes;
-    bm->bytes += bytes;
-    gettimeofday(&bm->t1, NULL);
-
-    if (bm->bytes > METRIC_SAMPLE_THRESHOLD) {
-        size_t t0_us = (1000000 * bm->t0.tv_sec) + bm->t0.tv_usec;
-        size_t t1_us = (1000000 * bm->t1.tv_sec) + bm->t1.tv_usec;
-        double elapsed_us = (t1_us - t0_us);
-        bm->tp = (8 * bm->bytes)/elapsed_us;
-        //printf("%f Mb/s\n", bm->tp);
-
-        bm->bytes = 0;
-        gettimeofday(&bm->t0, NULL);
-    }
-}
-*/
 
 static inline void
 read_from_source(struct io_segment_t *seg, IO_DESC *src, char *buf, size_t *bytes)
@@ -253,11 +211,11 @@ segment_run(void *arg)
             continue;
         }
 
-        seg->metric.request_count++;
         size_t bytes = buflen;
         read_from_source(seg, src, buf, &bytes);
 
         if (bytes == 0) {
+            usleep(1000);
             /*
             if (*seg->state == STREAM_FINISHING) {
                 seg_trace(seg, "Source empty");
@@ -265,15 +223,6 @@ segment_run(void *arg)
             }
             */
             continue;
-        }
-        seg->metric.response_count++;
-
-        seg->metric.received_bytes += bytes;
-        seg->metric.received_count++;
-
-        if (bytes != buflen) {
-            seg->metric.short_bytes += bytes;
-            seg->metric.short_count++;
         }
 
         size_t src_bytes = bytes;
@@ -291,7 +240,6 @@ segment_run(void *arg)
     }
 
     free_pool(pool);
-    cleanup_segment(seg);
     pthread_exit(NULL);
 }
 
@@ -367,6 +315,66 @@ segment_join(IO_SEGMENT seg)
 }
 
 static void
+segment_print_metrics_internal(struct io_segment_t *seg, enum segment_direction_e dir)
+{
+    IO_HANDLE h = 0;
+    switch (dir) {
+    case SEG_DIR_IN:
+        h = seg->in;
+        break;
+
+    case SEG_DIR_OUT:
+        h = seg->out;
+        break;
+
+    case SEG_DIR_OUT1:
+        h = seg->out1;
+        break;
+    }
+
+    if (h == 0) {
+        return;
+    }
+
+    struct io_metrics_t *m = (struct io_metrics_t *)machine_metrics(h);
+    if (!m) {
+        return;
+    }
+
+    // A segment's input is a machine's output, and visa versa
+    char mstr[1024];
+    switch (dir) {
+    case SEG_DIR_IN:
+        machine_metrics_fmt(&m->out, mstr, 1024,
+            METRICS_FMT_TYPE_ONELINE | METRICS_CALC_TYPE_FULL);
+        seg_info(seg, "I: %s", mstr);
+        break;
+    case SEG_DIR_OUT:
+    case SEG_DIR_OUT1:
+        machine_metrics_fmt(&m->in, mstr, 1024,
+            METRICS_FMT_TYPE_ONELINE | METRICS_CALC_TYPE_FULL);
+        seg_info(seg, "O: %s", mstr);
+        break;
+    default:
+        break;
+    }
+}
+
+void
+segment_print_metrics(IO_SEGMENT seg)
+{
+    struct io_segment_t *s = (struct io_segment_t *)seg;
+
+    if (s->in == 0 && s->out == 0 && s->out1 == 0) {
+        return;
+    }
+
+    segment_print_metrics_internal(s, SEG_DIR_IN);
+    segment_print_metrics_internal(s, SEG_DIR_OUT);
+    segment_print_metrics_internal(s, SEG_DIR_OUT1);
+}
+
+static void
 destroy_machine(IO_HANDLE h)
 {
     if (h == 0) {
@@ -434,52 +442,6 @@ segment_enable_metrics(IO_SEGMENT seg)
     machine_metrics_enable(s->in);
     machine_metrics_enable(s->out);
     machine_metrics_enable(s->out1);
-}
-
-void
-segment_print_metrics(IO_SEGMENT seg)
-{
-    struct io_segment_t *s = (struct io_segment_t *)seg;
-    printf("%s%s%s:\n", *s->group, s->gsep, s->name);
-
-    IO_HANDLE h[3] = {s->in, s->out, s->out1};
-    for (int i = 0; i < 3; i++) {
-        IO_DESC *d = machine_get_desc(h[i]);
-        if (!d) {
-            continue;
-        }
-
-        char bstr[64];
-        char rstr[64];
-        struct io_metrics_t *m = d->machine->metrics(h[i]);
-
-        double t0_us, t1_us, e_in, e_out;
-        t0_us = m->in.t_start.tv_sec * 1000000 + m->in.t_start.tv_usec;
-        t1_us = m->in.t_stop.tv_sec * 1000000 + m->in.t_stop.tv_usec;
-        e_in = (t1_us - t0_us);
-
-        t0_us = m->out.t_start.tv_sec * 1000000 + m->out.t_start.tv_usec;
-        t1_us = m->out.t_stop.tv_sec * 1000000 + m->out.t_stop.tv_usec;
-        e_out = (t1_us - t0_us);
-
-        printf("\t%s[%d]:\n", d->machine->name, h[i]);
-        size_t_fmt(bstr, 64, m->in.total_bytes);
-        if (m->in.total_bytes > 0) {
-            double_fmt(rstr, 64, e_in);
-            printf("\tI: %10sB %10sB/s\n", bstr, rstr);
-        } else {
-            printf("\tI: %10sB %10sB/s\n", "---", "---");
-        }
-
-        size_t_fmt(bstr, 64, m->out.total_bytes);
-        if (m->out.total_bytes > 0) {
-            double_fmt(rstr, 64, e_in);
-            printf("\tO: %10sB %10sB/s\n", bstr, rstr);
-        } else {
-            printf("\tO: %10sB %10sB/s\n", "---", "---");
-        }
-        printf("\n");
-    }
 }
 
 void

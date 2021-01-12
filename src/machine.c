@@ -247,16 +247,16 @@ machine_desc_read(IO_HANDLE h, void *buf, size_t *bytes)
     }
 
     machine_desc_acquire(d);
+    size_t in_bytes = *bytes;
     struct io_filter_t *f = (struct io_filter_t *)d->io_read->obj;
     ret = f->call(f, buf, bytes, IO_NO_BLOCK, IO_DEFAULT_ALIGN);
 
-    if (ret == IO_ERROR) {
-        ret = f->call(f, buf, bytes, IO_NO_BLOCK, IO_DEFAULT_ALIGN);
-    }
-
     if (d->metrics) {
         IO_METRICS *m = &d->metrics->out;
-        m->fn(m, *bytes);
+        m->fn(m, in_bytes, *bytes);
+        if (ret == IO_COMPLETE) {
+            machine_metrics_update(m);
+        }
     }
 
     machine_desc_release(d);
@@ -306,12 +306,16 @@ machine_desc_write(IO_HANDLE h, void *buf, size_t *bytes)
     }
 
     machine_desc_acquire(d);
+    size_t in_bytes = *bytes;
     struct io_filter_t *f = (struct io_filter_t *)d->io_write->obj;
     ret = f->call(f, buf, bytes, IO_NO_BLOCK, IO_DEFAULT_ALIGN);
 
     if (d->metrics) {
         IO_METRICS *m = &d->metrics->in;
-        m->fn(m, *bytes);
+        m->fn(m, in_bytes, *bytes);
+        if (ret == IO_COMPLETE) {
+            machine_metrics_update(m);
+        }
     }
 
     machine_desc_release(d);
@@ -330,6 +334,11 @@ machine_disable_read(IO_HANDLE h)
         machine_error(d, h, "io read descriptor not found");
     } else {
         io_desc_set_state(d, d->io_read, IO_DESC_DISABLING);
+
+        if (d->metrics) {
+            IO_METRICS *m = &d->metrics->out;
+            machine_metrics_update(m);
+        }
     }
 }
 
@@ -343,6 +352,11 @@ machine_disable_write(IO_HANDLE h)
         machine_error(d, h, "io write descriptor not found");
     } else {
         io_desc_set_state(d, d->io_write, IO_DESC_DISABLING);
+
+        if (d->metrics) {
+            IO_METRICS *m = &d->metrics->in;
+            machine_metrics_update(m);
+        }
     }
 }
 
