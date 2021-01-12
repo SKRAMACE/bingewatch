@@ -42,6 +42,8 @@ size_t
 fill_float_data(size_t len, float **data)
 {
     size_t bytes = len * sizeof(float);
+
+    trace("Generating buffer of %zd sequential floats (%zd bytes)", len, bytes);
     float *x = palloc(testpool, bytes);
 
     int i = 0;
