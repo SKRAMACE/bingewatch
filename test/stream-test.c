@@ -298,7 +298,6 @@ main(int nargs, char *argv[])
 
     test_setup();
 
-    segment_set_log_level("trace");
     test_add(stream_test);
     test_add(buffered_stream_test);
     test_add(multisegment_stream_test);

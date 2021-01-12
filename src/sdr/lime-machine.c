@@ -62,4 +62,5 @@ void
 lime_set_log_level(char *level)
 {
     soapy_set_log_level(level);
+    bw_set_log_level_str(level);
 }

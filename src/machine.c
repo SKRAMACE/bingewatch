@@ -21,6 +21,17 @@ static pthread_mutex_t machine_desc_list_lock = PTHREAD_MUTEX_INITIALIZER;
 void
 machine_register_desc(struct machine_desc_t *addme, IO_HANDLE *handle)
 {
+    // This is a common entrypoint for all bingwatch implementations
+    if (!is_bingewatch_logging_init) {
+        bw_init_logging();
+    }
+
+    if (!machine_descriptors && ENVEX_EXISTS("BW_MACHINE_LOG_LEVEL")) {
+        char __lvl[64];
+        ENVEX_COPY(__lvl, 64, "BW_MACHINE_LOG_LEVEL", "error");
+        machine_set_log_level(__lvl);
+    }
+
     // Get a handle, and set in descriptor, and filter objects
     IO_HANDLE h = request_handle(addme->machine);
     if (h == 0) {

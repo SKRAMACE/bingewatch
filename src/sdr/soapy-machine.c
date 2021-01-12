@@ -537,6 +537,20 @@ soapy_rx_set_bandwidth(IO_HANDLE h, double bandwidth)
     return soapy_set_val(h, SOAPY_VAR_BANDWIDTH, bandwidth);
 }
 
+static void
+soapy_log_init()
+{
+    char lvl[64];
+    ENVEX_COPY(lvl, 64, "BW_LIME_LOG_LEVEL", "error");
+    lime_set_log_level(lvl);
+
+    ENVEX_COPY(lvl, 64, "BW_SOAPY_LOG_LEVEL", "error");
+    soapy_set_log_level(lvl);
+
+    ENVEX_COPY(lvl, 64, "BW_SDRRX_LOG_LEVEL", "error");
+    sdrrx_set_log_level(lvl);
+}
+
 IOM *
 get_soapy_rx_machine()
 {
@@ -552,6 +566,8 @@ get_soapy_rx_machine()
 
         _soapy_rx_machine = machine;
         soapy_rx_machine = machine;
+
+        soapy_log_init();
     }
     return machine;
 }
