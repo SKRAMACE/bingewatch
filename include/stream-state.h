@@ -7,7 +7,8 @@
 (s == STREAM_RUNNING) ? "RUNNING" :(\
 (s == STREAM_FINISHING) ? "FINISHING" :(\
 (s == STREAM_DONE) ? "DONE" :(\
-(s == STREAM_ERROR) ? "ERROR" : "UNKNOWN STATE"))))))
+(s == STREAM_STOPPED) ? "STOPPED" :(\
+(s == STREAM_ERROR) ? "ERROR" : "UNKNOWN STATE")))))))
 
 enum stream_state_e {
     STREAM_INIT,
@@ -15,6 +16,7 @@ enum stream_state_e {
     STREAM_RUNNING,
     STREAM_FINISHING,
     STREAM_DONE,
+    STREAM_STOPPED,
     STREAM_ERROR,
 };
 

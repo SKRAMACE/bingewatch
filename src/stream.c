@@ -24,7 +24,6 @@ struct io_stream_t {
     // Thread variables
     pthread_t thread;           // Thread for stream state machine
     pthread_mutex_t lock;       // Stream lock (shared with segments)
-    int thread_running;
 
     // State machine
     enum stream_state_e state;  // Stream state
@@ -133,8 +132,6 @@ main_state_machine(void *args)
         }
     }
 
-    set_state(st, STREAM_DONE);
-
     // Join stream segments
     for (s = 0; s < st->n_segment; s++) {
         IO_SEGMENT seg = st->segments[s];
@@ -142,6 +139,7 @@ main_state_machine(void *args)
         segment_print_metrics(seg);
     }
 
+    set_state(st, STREAM_STOPPED);
     pthread_exit(NULL);
 }
 
@@ -305,7 +303,6 @@ start_stream(IO_STREAM h)
     }
 
     // Run the stream as its own thread
-    st->thread_running = 1;
     pthread_create(&st->thread, NULL, main_state_machine, (void *)st);
     return IO_SUCCESS;
 }
@@ -319,16 +316,18 @@ join_stream(IO_STREAM h)
         error("Stream %d not found", h);
         return;
     }
-
-    if (st->thread_running) {
-        pthread_join(st->thread, NULL);
-        st->thread_running = 0;
+    
+    while (st->state != STREAM_STOPPED) {
+        usleep(1000);
     }
+
+    return;
 }
 
 static void
 stop_stream_internal(struct io_stream_t *st)
 {
+    trace("%s: Stopping stream (state == %s)", st->name, STREAM_STATE_PRINT(st->state));
     while (1) {
         switch (st->state) {
         // wait for stream to start running
@@ -341,11 +340,8 @@ stop_stream_internal(struct io_stream_t *st)
 
         // send completion signal to the stream
         case STREAM_RUNNING:
-            set_state(st, STREAM_FINISHING);
-            return;
-
-        // stream is already set to stop
         case STREAM_FINISHING:
+            set_state(st, STREAM_DONE);
             return;
 
         case STREAM_DONE:
@@ -354,6 +350,9 @@ stop_stream_internal(struct io_stream_t *st)
         case STREAM_ERROR:
             error("%s: Error during STOP command", st->name);
             return;
+
+        case STREAM_STOPPED:
+            warn("%s: Stream already stopped", st->name);
 
         default:
             return;
@@ -406,9 +405,7 @@ stream_cleanup()
     // Wait for streams to complete
     struct io_stream_t *st = streams;
     while (st) {
-        if (st->thread_running) {
-            pthread_join(st->thread, NULL);
-        }
+        pthread_join(st->thread, NULL);
 
         int s = 0;
         for (; s < st->n_segment; s++) {
