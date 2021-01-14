@@ -27,9 +27,9 @@ machine_register_desc(struct machine_desc_t *addme, IO_HANDLE *handle)
     }
 
     if (!machine_descriptors && ENVEX_EXISTS("BW_MACHINE_LOG_LEVEL")) {
-        char __lvl[64];
-        ENVEX_COPY(__lvl, 64, "BW_MACHINE_LOG_LEVEL", "error");
-        machine_set_log_level(__lvl);
+        char lvl[64];
+        ENVEX_COPY(lvl, 64, "BW_MACHINE_LOG_LEVEL", "error");
+        machine_set_log_level(lvl);
     }
 
     // Get a handle, and set in descriptor, and filter objects
