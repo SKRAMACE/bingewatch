@@ -116,6 +116,7 @@ main_state_machine(void *args)
     //  2) A segment to signal error
     //  3) A shutdown from the main thread
     while (STREAM_RUNNING == st->state) {
+        // TODO: Use condition
         usleep(1000);
     }
 
@@ -318,6 +319,7 @@ join_stream(IO_STREAM h)
     }
     
     while (st->state != STREAM_STOPPED) {
+        // TODO: Use condition
         usleep(1000);
     }
 
@@ -333,8 +335,7 @@ stop_stream_internal(struct io_stream_t *st)
         // wait for stream to start running
         case STREAM_INIT:
         case STREAM_READY:
-            // TODO: Use an init lock
-            // printf("%s: still initializing\n", st->name);
+            // TODO: Use condition
             usleep(1000);
             continue;
 
