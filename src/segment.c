@@ -15,6 +15,12 @@ typedef void *(*pthread_fn)(void*);
 static char *gsep = "-";
 static char *group = "";
 
+static int metrics_enabled = 0;
+#define seg_metrics(s, x, ...) \
+ if (metrics_enabled == 1) { \
+     _logex_log_print(INFO, "MET", "%s%s%s: " x, *s->group, s->gsep, s->name, ##__VA_ARGS__); \
+ }
+
 #define seg_error(s, x, ...) error("%s%s%s: " x, *s->group, s->gsep, s->name, ##__VA_ARGS__)
 #define seg_info(s, x, ...) info("%s%s%s: " x, *s->group, s->gsep, s->name, ##__VA_ARGS__)
 #define seg_trace(s, x, ...) trace("%s%s%s: " x, *s->group, s->gsep, s->name, ##__VA_ARGS__)
@@ -347,13 +353,13 @@ segment_print_metrics_internal(struct io_segment_t *seg, enum segment_direction_
     case SEG_DIR_IN:
         machine_metrics_fmt(&m->out, mstr, 1024,
             METRICS_FMT_TYPE_ONELINE | METRICS_CALC_TYPE_FULL);
-        seg_info(seg, "I: %s", mstr);
+        seg_metrics(seg, "I: %s", mstr);
         break;
     case SEG_DIR_OUT:
     case SEG_DIR_OUT1:
         machine_metrics_fmt(&m->in, mstr, 1024,
             METRICS_FMT_TYPE_ONELINE | METRICS_CALC_TYPE_FULL);
-        seg_info(seg, "O: %s", mstr);
+        seg_metrics(seg, "O: %s", mstr);
         break;
     default:
         break;
@@ -442,6 +448,8 @@ segment_enable_metrics(IO_SEGMENT seg)
     machine_metrics_enable(s->in);
     machine_metrics_enable(s->out);
     machine_metrics_enable(s->out1);
+
+    metrics_enabled = 1;
 }
 
 void
