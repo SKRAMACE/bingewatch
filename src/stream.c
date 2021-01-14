@@ -24,6 +24,7 @@ struct io_stream_t {
     // Thread variables
     pthread_t thread;           // Thread for stream state machine
     pthread_mutex_t lock;       // Stream lock (shared with segments)
+    int thread_running;
 
     // State machine
     enum stream_state_e state;  // Stream state
@@ -304,6 +305,7 @@ start_stream(IO_STREAM h)
     }
 
     // Run the stream as its own thread
+    st->thread_running = 1;
     pthread_create(&st->thread, NULL, main_state_machine, (void *)st);
     return IO_SUCCESS;
 }
@@ -318,7 +320,10 @@ join_stream(IO_STREAM h)
         return;
     }
 
-    pthread_join(st->thread, NULL);
+    if (st->thread_running) {
+        pthread_join(st->thread, NULL);
+        st->thread_running = 0;
+    }
 }
 
 static void
@@ -401,17 +406,17 @@ stream_cleanup()
     // Wait for streams to complete
     struct io_stream_t *st = streams;
     while (st) {
-        pthread_join(st->thread, NULL);
-    }
+        if (st->thread_running) {
+            pthread_join(st->thread, NULL);
+        }
 
-    while (st) {
         int s = 0;
         for (; s < st->n_segment; s++) {
             IO_SEGMENT seg = st->segments[s];
             segment_destroy(seg);
         }
         
-        void *destroy_me = st;
+        void *destroy_me = st->pool;
         st = st->next;
         free_pool(destroy_me);
     }
