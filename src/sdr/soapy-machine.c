@@ -215,12 +215,18 @@ read_data_from_hw(IO_FILTER_ARGS)
 
         trace("expected: %zd, actual: %zd, diff: %d, samples: %d", expected, timeNs, diff, samples_read);
         if (diff < -1 || diff > 1) {
-            error("data read clock mismatch: %d: lost %zd samples",
-                diff, (size_t)((double)diff/chan->ns_per_sample));
-            goto error_return;
+            if (sdr->allow_overruns) {
+                warn("data read clock mismatch: %d: lost %zd samples",
+                    diff, (size_t)((double)diff/chan->ns_per_sample));
+            } else {
+                error("data read clock mismatch: %d: lost %zd samples",
+                    diff, (size_t)((double)diff/chan->ns_per_sample));
+                goto error_return;
+            }
+        } else {
+            chan->error_counter = 0;
         }
 
-        chan->error_counter = 0;
         remaining -= (size_t)samples_read;
         data += samples_read;
     }

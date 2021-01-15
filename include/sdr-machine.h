@@ -45,6 +45,7 @@ struct sdr_channel_t {
 
     enum sdr_chan_state_e state;
 
+    int allow_overruns;
     //char init;
     //char error;
 

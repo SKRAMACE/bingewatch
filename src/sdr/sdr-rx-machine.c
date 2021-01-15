@@ -359,6 +359,21 @@ sdr_init_machine_functions(IOM *machine)
 }
 
 void
+sdrrx_allow_overruns(IO_HANDLE h)
+{
+    struct machine_desc_t *d = machine_get_desc(h);
+    if (!d) {
+        error("Sdr channel %d not found", h);
+        return;
+    }
+
+    info("%d: Overruns allowed", h);
+    struct sdr_channel_t *c = (struct sdr_channel_t *)d;
+
+    c->allow_overruns = 1;
+}
+
+void
 sdrrx_set_log_level(char *level)
 {
     bw_set_log_level_str(level);
