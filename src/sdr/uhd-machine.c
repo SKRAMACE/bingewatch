@@ -9,6 +9,10 @@
 #include "sdr-machine.h"
 #include "sdrs.h"
 
+#define LOGEX_TAG "BW-UHD"
+#include "logging.h"
+#include "bw-log.h"
+
 #define UHD_RX_TIMEOUT 3.0
 #define RECV_FRAMES ",recv_frame_size=2056,num_recv_frames=2048"
 
@@ -75,11 +79,22 @@ destroy_device(struct sdr_device_t *sdr)
     uhd_usrp_free(usrp);
 }
 
+static void
+usrp_print_error(struct uhd_channel_t *chan)
+{
+    char *uhd_error = malloc(1024);
+    uhd_get_last_error(uhd_error, 1024);
+
+    char *usrp_error = malloc(1024);
+    uhd_usrp_last_error(*chan->sdr, usrp_error, 1024);
+    error("UHD: \"%s\", USRP: \"%s\"", uhd_error, usrp_error);
+
+    return;
+}
+
 static int
 uhd_channel_init(struct uhd_channel_t *chan)
 {
-    char error_string[512];
-
     // Set sample rate
     if (uhd_usrp_set_rx_rate(*chan->sdr, chan->_sdr.rate, chan->channel) != 0) {
         goto error;
@@ -125,10 +140,7 @@ uhd_channel_init(struct uhd_channel_t *chan)
     return IO_SUCCESS;
 
 error:
-    uhd_get_last_error(error_string, 512);
-    fprintf(stderr, "USRP reported the following error: %s\n", error_string);
-    uhd_usrp_last_error(*chan->sdr, error_string, 512);
-    fprintf(stderr, "USRP reported the following error: %s\n", error_string);
+    usrp_print_error(chan);
     return IO_ERROR;
 }
 
@@ -146,7 +158,7 @@ read_data_from_hw(IO_FILTER_ARGS)
 
     if (!chan->_sdr.init) {
         if (uhd_channel_init(chan) < IO_SUCCESS) {
-            printf("ERROR: Failed to init channel\n");
+            error("Failed to init channel");
             return IO_ERROR;
         }
         chan->_sdr.init = 1;
@@ -164,18 +176,19 @@ read_data_from_hw(IO_FILTER_ARGS)
 
         uhd_rx_metadata_error_code_t error_code;
         if (uhd_rx_metadata_error_code(*chan->rx_metadata, &error_code) != 0) {
-            printf("ERROR: stream error (RX metadata)\n");
+            error("Stream error (RX metadata)\n");
             return IO_ERROR;
         }
 
         switch (error_code) {
         case UHD_RX_METADATA_ERROR_CODE_NONE:
-            printf("-");
+            warn("UHD metadata error \"none\"");
             break;
         case UHD_RX_METADATA_ERROR_CODE_OVERFLOW:
+            warn("UHD metadata error \"overflow\"");
             break;
         default:
-            printf("ERROR: uhd error (%d)\n", error_code);
+            error("uhd error (%d)\n", error_code);
             return IO_ERROR;
         }
 
@@ -183,7 +196,6 @@ read_data_from_hw(IO_FILTER_ARGS)
         remaining -= read_samp;
     }
 
-    printf("%zd bytes\n", *IO_FILTER_ARGS_BYTES);
     return IO_SUCCESS;
 }
 
@@ -201,7 +213,7 @@ static struct sdr_device_t *
 create_device(POOL *p, void *args)
 {
     if(uhd_set_thread_priority(uhd_default_thread_priority, true)){
-        printf("WARNING: Unable to set thread priority\n");
+        warn("Unable to set thread priority");
     }
 
     // Copy serial from args
@@ -213,27 +225,27 @@ create_device(POOL *p, void *args)
     // Attempt to connect to device by serial
     uhd_usrp_handle *sdr = (uhd_usrp_handle *)pcalloc(p, sizeof(uhd_usrp_handle));
     if (uhd_usrp_make(sdr, uhd_args) != 0) {
-        printf("ERROR: uhd_usrp_make() failure\n");
+        error("uhd_usrp_make() failure\n");
         return NULL;
     }
 
     // Success!  Now, create the IOM structs
     struct uhd_device_t *dev = pcalloc(p, sizeof(struct uhd_device_t));
     if (!dev) {
-        printf("ERROR: Failed to allocate %zu bytes for sdr device\n",
+        error("Failed to allocate %zu bytes for sdr device",
             sizeof(struct uhd_device_t));
         return NULL;
     }
 
     // Create RX streamer
     if (uhd_rx_streamer_make(&dev->rx_streamer) != 0) {
-        printf("ERROR: uhd_rx_streamer_make() failure\n");
+        error("uhd_rx_streamer_make() failure");
         return NULL;
     }
 
     // Create RX metadata
     if (uhd_rx_metadata_make(&dev->rx_metadata) != 0) {
-        printf("ERROR: uhd_rx_metadata_make() failure\n");
+        error("uhd_rx_metadata_make() failure");
         return NULL;
     }
 
@@ -287,7 +299,7 @@ create_rx_filter(POOL *p, struct sdr_channel_t *chan, struct sdr_device_t *dev)
     fhw->obj = chan;
 
     if (!fhw) {
-        printf("Error creating rx filters\n");
+        error("Failed to create uhd rx filters");
         return NULL;
     }
 
@@ -314,7 +326,7 @@ api_init(IOM *machine)
 static IO_HANDLE
 uhd_create(void *args)
 {
-    printf("ERROR: Implementation Error: Use \"sdr_create()\" to implement a uhd machine\n");
+    error("Implementation Error: Use \"sdr_create()\" to implement a uhd machine\n");
     return 0;
 }
 
@@ -343,7 +355,7 @@ uhd_set_val(IO_HANDLE h, int var, double val)
     case UHD_VAR_BANDWIDTH:
         chan->bandwidth = val; break;
     default:
-        printf("Unknown Var (%d)\n", var);
+        error("Unknown Var (%d)", var);
         goto failure;
     }
 
@@ -372,7 +384,7 @@ uhd_set_val(IO_HANDLE h, int var, double val)
         }
         break;
     default:
-        printf("Unknown Var (%d)\n", var);
+        error("Unknown Var (%d)", var);
         goto failure;
     }
 
@@ -384,10 +396,7 @@ success:
     return 0;
 
 error:
-    uhd_get_last_error(error_string, 512);
-    fprintf(stderr, "USRP reported the following error: %s\n", error_string);
-    uhd_usrp_last_error(*uhd->sdr, error_string, 512);
-    fprintf(stderr, "USRP reported the following error: %s\n", error_string);
+    usrp_print_error(chan);
     chan->error = 1;
 
 failure:
@@ -465,4 +474,11 @@ uhd_set_rx(IO_HANDLE h, double freq, double rate, double bandwidth)
     chan->_sdr.freq = freq;
     chan->_sdr.rate = rate;
     chan->_sdr.bandwidth = bandwidth;
+}
+
+void
+soapy_set_log_level(char *level)
+{
+    sdrrx_set_log_level(level);
+    bw_set_log_level_str(level);
 }
