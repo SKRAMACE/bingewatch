@@ -422,6 +422,15 @@ uhd_rx_set_bandwidth(IO_HANDLE h, double bandwidth)
     return uhd_set_val(h, UHD_VAR_BANDWIDTH, bandwidth);
 }
 
+static void
+soapy_log_init()
+{
+    ENVEX_COPY(lvl, 64, "BW_UHD_LOG_LEVEL", "error");
+    uhd_set_log_level(lvl);
+
+    ENVEX_COPY(lvl, 64, "BW_SDRRX_LOG_LEVEL", "error");
+    sdrrx_set_log_level(lvl);
+}
 
 const IOM *
 get_uhd_rx_machine()
@@ -477,7 +486,7 @@ uhd_set_rx(IO_HANDLE h, double freq, double rate, double bandwidth)
 }
 
 void
-soapy_set_log_level(char *level)
+uhd_set_log_level(char *level)
 {
     sdrrx_set_log_level(level);
     bw_set_log_level_str(level);
