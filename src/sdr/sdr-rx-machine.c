@@ -270,7 +270,7 @@ sdr_create(IOM *machine, void *arg)
 
     struct sdr_device_t *device = api->device(device_pool, arg);
     if (!device) {
-        error("Failed to create sdr rx device descriptor\n");
+        error("Failed to create sdr rx device descriptor");
         free_pool(device_pool);
         return 0;
     }
@@ -301,7 +301,7 @@ sdr_create(IOM *machine, void *arg)
     }
 
     if (init_filters(chan, device, api->rx_filter) < IO_SUCCESS) {
-        error("Failed to initialize sdr rx filter\n");
+        error("Failed to initialize sdr rx filter");
         free_pool(device_pool);
         free_pool(channel_pool);
         return 0;

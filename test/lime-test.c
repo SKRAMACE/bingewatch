@@ -2,7 +2,9 @@
 #include <stdio.h>
 #include <envex.h>
 
+#include "simple-machines.h"
 #include "sdrs.h"
+#include "stream.h"
 #include "test.h"
 #include "logging.h"
 
@@ -107,7 +109,7 @@ stream_test()
     IO_HANDLE lime = new_lime_rx_machine();
     lime_set_rx(lime, freq, samp_rate, bandwidth);
 
-    IO_HANDLE out = new_file_write_machine("/dev/null");
+    IO_HANDLE out = new_file_write_machine(bw_test_rootdir, "lime-stream-test", "cfile");
 
     IO_STREAM stream = new_stream();
     io_stream_add_segment(stream, lime, out, BW_NOFLAGS);

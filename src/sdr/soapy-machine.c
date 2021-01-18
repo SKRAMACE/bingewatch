@@ -206,7 +206,8 @@ read_data_from_hw(IO_FILTER_ARGS)
             int e = samples_read;
             const char *e_msg = SoapySDRDevice_lastError();
             error("SoapySDRDevice_readStream() error %d: %s", e, e_msg);
-            goto error_return;
+            *IO_FILTER_ARGS_BYTES = 0;
+            return IO_ERROR;
         }
 
         long long expected = (long long)(chan->expected_timestamp + .5);
@@ -221,7 +222,7 @@ read_data_from_hw(IO_FILTER_ARGS)
             } else {
                 error("data read clock mismatch: %d: lost %zd samples",
                     diff, (size_t)((double)diff/chan->ns_per_sample));
-                goto error_return;
+                goto overflow_error;
             }
         } else {
             chan->error_counter = 0;
@@ -233,7 +234,7 @@ read_data_from_hw(IO_FILTER_ARGS)
 
     return IO_SUCCESS;
 
-error_return:
+overflow_error:
     *IO_FILTER_ARGS_BYTES = 0;
     return (++chan->error_counter > MAX_ERROR_COUNT) ? IO_ERROR : IO_SUCCESS;
 }

@@ -53,7 +53,8 @@ TESTLIBS = \
     -luuid \
 
 SDRLIBS = \
-    -lSoapySDR
+    -lSoapySDR \
+    -luhd \
 
 BUF = \
 	block-list-buf.c \
@@ -121,6 +122,9 @@ sock-test: $(TEST) socket-machine.c
 	$(CC) $(TEST_CFLAGS) test/sock-test.c $^ $(INC) -o test/bin/sock-test $(TESTLIBS)
 
 lime-test: $(TEST) $(SRC) sdr-rx-machine.c soapy-machine.c lime-machine.c
+	$(CC) $(TEST_CFLAGS) test/$@.c $^ $(INC) -o test/bin/$@ $(TESTLIBS) $(SDRLIBS)
+
+b210-test: $(TEST) $(SRC) sdr-rx-machine.c uhd-machine.c b210-machine.c
 	$(CC) $(TEST_CFLAGS) test/$@.c $^ $(INC) -o test/bin/$@ $(TESTLIBS) $(SDRLIBS)
 
 tests: buffer-test file-test stream-test

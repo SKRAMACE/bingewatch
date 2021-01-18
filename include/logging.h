@@ -9,8 +9,13 @@ void rb_set_log_level(char *level);
 void fbb_set_log_level(char *level);
 void blb_set_log_level(char *level);
 
+// SDRS
+void sdrrx_set_log_level(char *level);
+
 void lime_set_log_level(char *level);
 void soapy_set_log_level(char *level);
-void sdrrx_set_log_level(char *level);
+
+void b210_set_log_level(char *level);
+void uhd_set_log_level(char *level);
 
 #endif

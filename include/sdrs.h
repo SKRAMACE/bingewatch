@@ -39,14 +39,26 @@ int lime_rx_set_bandwidth(IO_HANDLE h, double bandwidth);
 IO_HANDLE new_lime_rx_machine();
 
 /* UHD SDR SUPPORT */
-const IOM * get_uhd_rx_machine();
-IO_HANDLE new_uhd_rx_machine(const char *id, int channel);
-IO_HANDLE new_b210_rx_machine(const char *id);
-void uhd_set_gain(IO_HANDLE h, float gain);
+extern const IOM *uhd_rx_machine;
+IOM * get_uhd_rx_machine();
+IO_HANDLE new_uhd_rx_machine(int channel);
+IO_HANDLE new_uhd_rx_machine_devstr(int channel, char *devstr);
 void uhd_set_rx(IO_HANDLE h, double freq, double rate, double bandwidth);
 
+void uhd_rx_set_gain(IO_HANDLE h, float lna);
 int uhd_rx_set_freq(IO_HANDLE h, double freq);
 int uhd_rx_set_samp_rate(IO_HANDLE h, double samp_rate);
 int uhd_rx_set_bandwidth(IO_HANDLE h, double bandwidth);
+
+/* B210 SDR SUPPORT */
+extern const IOM *b210_rx_machine;
+IO_HANDLE new_b210_rx_machine();
+IO_HANDLE new_b210_rx_machine_devstr(char *devstr);
+void b210_set_rx(IO_HANDLE h, double freq, double rate, double bandwidth);
+
+void b210_rx_set_gain(IO_HANDLE h, float lna);
+int b210_rx_set_freq(IO_HANDLE h, double freq);
+int b210_rx_set_samp_rate(IO_HANDLE h, double samp_rate);
+int b210_rx_set_bandwidth(IO_HANDLE h, double bandwidth);
 
 #endif
