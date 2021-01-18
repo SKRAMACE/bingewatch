@@ -103,7 +103,7 @@ $(LIB): $(SRC)
 libbingewatch_soapy: $(LIB) soapy-machine.c lime-machine.c
 	$(CC) $(CFLAGS) $^ $(INC) $(LDFLAGS) $(LCFLAGS) -o $@
 
-libbingewatch_uhd: $(LIB) uhd-machine.c
+libbingewatch_uhd: $(LIB) uhd-machine.c b210-machine.c
 	$(CC) $(CFLAGS) $^ $(INC) $(LDFLAGS) $(LCFLAGS) -o $@
 
 %.o: %.c
