@@ -9,7 +9,7 @@ const IOM *b210_rx_machine;
 static IOM *_b210_rx_machine = NULL;
 
 void
-b210_set_gain(IO_HANDLE h, float lna)
+b210_rx_set_gain(IO_HANDLE h, float lna)
 {
     uhd_rx_set_gain(h, lna);
 }
