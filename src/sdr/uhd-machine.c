@@ -412,7 +412,7 @@ uhd_set_val(IO_HANDLE h, int var, double val)
         goto failure;
     }
 
-    if (chan->state == SDR_CHAN_READY) {
+    if (chan->state == SDR_CHAN_NOINIT) {
         goto success;
     }
     
