@@ -4,7 +4,8 @@
 #include "simple-machines.h"
 #include "filter.h"
 
-static IOM *null_machine = NULL;
+const IOM *null_machine;
+static IOM *_null_machine = NULL;
 
 static int
 null_read(IO_FILTER_ARGS)
@@ -22,7 +23,7 @@ null_write(IO_FILTER_ARGS)
 static IO_HANDLE
 create_null(void *arg)
 {
-    POOL *p = create_subpool(null_machine->alloc);
+    POOL *p = create_subpool(_null_machine->alloc);
     if (!p) {
         printf("ERROR: Failed to create memory pool\n");
         return 0;
@@ -38,7 +39,7 @@ create_null(void *arg)
     pthread_mutex_init(&desc->lock, NULL);
     desc->pool = p;
 
-    if (machine_desc_init(p, null_machine, desc) < IO_SUCCESS) {
+    if (machine_desc_init(p, _null_machine, desc) < IO_SUCCESS) {
         free_pool(p);
         return 0;
     }
@@ -77,7 +78,7 @@ get_bytes(IO_HANDLE h)
 const IOM*
 get_null_machine()
 {
-    IOM *machine = null_machine;
+    IOM *machine = _null_machine;
     if (!machine) {
         machine = machine_register("null");
 
@@ -88,6 +89,7 @@ get_null_machine()
         machine->write = machine_desc_write;
         machine->obj = NULL;
 
+        _null_machine = machine;
         null_machine = machine;
     }
     return (const IOM *)machine;
@@ -97,6 +99,6 @@ get_null_machine()
 IO_HANDLE
 new_null_machine()
 {
-    const IOM *null_machine = get_null_machine();
-    return null_machine->create(NULL);
+    const IOM *m = get_null_machine();
+    return m->create(NULL);
 }

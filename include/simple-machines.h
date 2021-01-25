@@ -39,6 +39,7 @@ IO_HANDLE new_fifo_read_machine(char *fname);
 void fifo_iom_set_leave_open(IO_HANDLE h);
 
 /***** NULL MACHINE *****/
+extern const IOM *null_machine;
 IO_HANDLE new_null_machine();
 
 #endif
