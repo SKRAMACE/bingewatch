@@ -442,7 +442,7 @@ uhd_set_val(IO_HANDLE h, int var, double val)
     }
 
     uhd->stream_cmd.stream_mode = UHD_STREAM_MODE_START_CONTINUOUS;
-    if (uhd_channel_start(soapy) < IO_SUCCESS) {
+    if (uhd_channel_start(uhd) < IO_SUCCESS) {
         goto error;
     }
 
