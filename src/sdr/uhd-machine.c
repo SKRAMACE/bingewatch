@@ -442,7 +442,9 @@ uhd_set_val(IO_HANDLE h, int var, double val)
     }
 
     uhd->stream_cmd.stream_mode = UHD_STREAM_MODE_START_CONTINUOUS;
-    uhd_rx_streamer_issue_stream_cmd(uhd->rx_streamer, &uhd->stream_cmd);
+    if (uhd_channel_start(soapy) < IO_SUCCESS) {
+        goto error;
+    }
 
 success:
     pthread_mutex_unlock(&d->lock);

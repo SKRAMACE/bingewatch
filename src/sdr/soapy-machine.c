@@ -510,7 +510,9 @@ soapy_set_val(IO_HANDLE h, int var, double val)
         goto unlock_failure;
     }
 
-    SoapySDRDevice_activateStream(soapy->sdr, soapy->rx, 0, 0, 0);
+    if (soapy_channel_start(soapy) < IO_SUCCESS) {
+        goto soapy_error;
+    }
 
 success:
     pthread_mutex_unlock(&d->lock);
