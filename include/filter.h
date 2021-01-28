@@ -24,7 +24,7 @@ typedef int (*io_filter_reset_fn)(void *);
 
 typedef struct io_filter_t {
     char enabled;
-    char direction;
+    enum io_filter_direction direction;
     char name[IO_MAX_NAME_LEN];
     void *alloc;
 
