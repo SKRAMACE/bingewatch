@@ -129,7 +129,7 @@ b210-test: $(TEST) $(SRC) sdr-rx-machine.c uhd-machine.c b210-machine.c
 
 tests: buffer-test file-test stream-test
 
-all: $(LIB) $(LIB)_soapy
+all: $(LIB) $(LIB)_soapy $(LIB)_uhd
 
 install: $(LIB)
 	@./install
