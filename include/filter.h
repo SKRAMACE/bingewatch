@@ -71,6 +71,36 @@ typedef struct io_filter_t {
 // Call the next filter with custom args
 #define CALL_FILTER_PASS_ARGS(f) f->call(f, _iof_buf, _iof_bytes, _iof_block, _iof_align)
 
+//***** TODO: MOVE TO BINGEWATCH *****//
+#define IO_FILTER_RETVAL _iof_retval
+#define IO_FILTER_RETVAL_INIT() {int IO_FILTER_RETVAL = IO_ERROR;
+#define IO_FILTER_RETVAL_RETURN() return IO_FILTER_RETVAL;}
+
+#define IO_FILTER_HANDLE(rw) \
+    if (rw == IO_FILTER_ARGS_FILTER->direction) { \
+        int retval = CALL_NEXT_FILTER(); \
+        if (retval != IO_SUCCESS) { \
+            return retval; \
+        } \
+    }
+
+#define IO_FILTER_HANDLE_JUMP(rw,ejump) \
+    if (rw == IO_FILTER_ARGS_FILTER->direction) { \
+        IO_FILTER_RETVAL = CALL_NEXT_FILTER(); \
+        if (IO_FILTER_RETVAL != IO_SUCCESS) { \
+            goto ejump; \
+        } \
+    }
+
+#define IO_FILTER_READ_HANDLE() IO_FILTER_HANDLE(IOF_READ)
+#define IO_FILTER_WRITE_HANDLE() IO_FILTER_HANDLE(IOF_WRITE)
+#define IO_FILTER_READ_HANDLE_JUMP(ejump) IO_FILTER_HANDLE_JUMP(IO_FILTER_READ, ejump)
+#define IO_FILTER_WRITE_HANDLE_JUMP(ejump) IO_FILTER_HANDLE_JUMP(IO_FILTER_WRITE, ejump)
+//***** TODO: MOVE TO BINGEWATCH *****//
+
+
+
+// Prototypes
 struct io_filter_t *create_filter(void *alloc, const char *name, io_filter_fn fn);
 struct io_filter_t *get_io_filter(struct io_filter_t *filter, const char *name);
 void io_filter_enable(struct io_filter_t *filter, const char *name);
