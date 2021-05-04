@@ -20,6 +20,7 @@ enum soapy_var_e {
     SOAPY_VAR_FREQ,
     SOAPY_VAR_RATE,
     SOAPY_VAR_BANDWIDTH,
+    SOAPY_VAR_PPM,
 };
 
 const IOM *soapy_rx_machine;
@@ -478,6 +479,8 @@ soapy_set_val(IO_HANDLE h, int var, double val)
         chan->rate = val; break;
     case SOAPY_VAR_BANDWIDTH:
         chan->bandwidth = val; break;
+    case SOAPY_VAR_PPM:
+        chan->ppm = val; break;
     default:
         error("Unknown Var (%d)", var);
         goto unlock_failure;
@@ -502,6 +505,11 @@ soapy_set_val(IO_HANDLE h, int var, double val)
         break;
     case SOAPY_VAR_BANDWIDTH:
         if (SoapySDRDevice_setBandwidth(soapy->sdr, SOAPY_SDR_RX, 0, val) != 0) {
+            goto soapy_error;
+        }
+        break;
+    case SOAPY_VAR_PPM:
+        if (SoapySDRDevice_setFrequencyCorrection(soapy->sdr, SOAPY_SDR_RX, 0, val) != 0) {
             goto soapy_error;
         }
         break;
@@ -544,6 +552,12 @@ int
 soapy_rx_set_bandwidth(IO_HANDLE h, double bandwidth)
 {
     return soapy_set_val(h, SOAPY_VAR_BANDWIDTH, bandwidth);
+}
+
+int
+soapy_rx_set_ppm(IO_HANDLE h, double ppm)
+{
+    return soapy_set_val(h, SOAPY_VAR_PPM, ppm);
 }
 
 static void

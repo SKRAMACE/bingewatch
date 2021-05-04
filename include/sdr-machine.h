@@ -41,6 +41,7 @@ struct sdr_channel_t {
     double freq;
     double rate;
     double bandwidth;
+    double ppm;
     float gain;
 
     enum sdr_chan_state_e state;

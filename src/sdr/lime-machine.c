@@ -45,6 +45,12 @@ lime_rx_set_bandwidth(IO_HANDLE h, double bandwidth)
     soapy_rx_set_bandwidth(h, bandwidth);
 }
 
+int
+lime_rx_set_ppm(IO_HANDLE h, double ppm)
+{
+    return soapy_rx_set_ppm(h, ppm);
+}
+
 IO_HANDLE
 new_lime_rx_machine()
 {
