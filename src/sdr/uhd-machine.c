@@ -480,14 +480,17 @@ uhd_rx_set_bandwidth(IO_HANDLE h, double bandwidth)
 static void
 uhd_log_init()
 {
+    char default_lvl[64];
+    ENVEX_COPY(default_lvl, 64, "BW_LOG_LEVEL", "error");
+
     char lvl[64];
-    ENVEX_COPY(lvl, 64, "BW_B210_LOG_LEVEL", "error");
+    ENVEX_COPY(lvl, 64, "BW_B210_LOG_LEVEL", default_lvl);
     b210_set_log_level(lvl);
 
-    ENVEX_COPY(lvl, 64, "BW_UHD_LOG_LEVEL", "error");
+    ENVEX_COPY(lvl, 64, "BW_UHD_LOG_LEVEL", default_lvl);
     uhd_set_log_level(lvl);
 
-    ENVEX_COPY(lvl, 64, "BW_SDRRX_LOG_LEVEL", "error");
+    ENVEX_COPY(lvl, 64, "BW_SDRRX_LOG_LEVEL", default_lvl);
     sdrrx_set_log_level(lvl);
 }
 

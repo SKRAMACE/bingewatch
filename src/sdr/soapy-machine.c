@@ -563,14 +563,17 @@ soapy_rx_set_ppm(IO_HANDLE h, double ppm)
 static void
 soapy_log_init()
 {
+    char default_lvl[64];
+    ENVEX_COPY(default_lvl, 64, "BW_LOG_LEVEL", "error");
+
     char lvl[64];
-    ENVEX_COPY(lvl, 64, "BW_LIME_LOG_LEVEL", "error");
+    ENVEX_COPY(lvl, 64, "BW_LIME_LOG_LEVEL", default_lvl);
     lime_set_log_level(lvl);
 
-    ENVEX_COPY(lvl, 64, "BW_SOAPY_LOG_LEVEL", "error");
+    ENVEX_COPY(lvl, 64, "BW_SOAPY_LOG_LEVEL", default_lvl);
     soapy_set_log_level(lvl);
 
-    ENVEX_COPY(lvl, 64, "BW_SDRRX_LOG_LEVEL", "error");
+    ENVEX_COPY(lvl, 64, "BW_SDRRX_LOG_LEVEL", default_lvl);
     sdrrx_set_log_level(lvl);
 }
 

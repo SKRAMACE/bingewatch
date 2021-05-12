@@ -27,8 +27,11 @@ machine_register_desc(struct machine_desc_t *addme, IO_HANDLE *handle)
     }
 
     if (!machine_descriptors && ENVEX_EXISTS("BW_MACHINE_LOG_LEVEL")) {
+        char default_lvl[64];
+        ENVEX_COPY(default_lvl, 64, "BW_LOG_LEVEL", "error");
+
         char lvl[64];
-        ENVEX_COPY(lvl, 64, "BW_MACHINE_LOG_LEVEL", "error");
+        ENVEX_COPY(lvl, 64, "BW_MACHINE_LOG_LEVEL", default_lvl);
         machine_set_log_level(lvl);
     }
 
