@@ -38,17 +38,20 @@ struct io_stream_t {
     int n_segment;              // Number of segments
     int segment_len;            // Segment entries
 
+    enum stream_status_e status;
+
     struct io_stream_t *next;   // Next stream in list
 } *streams = NULL;
 
 static void
 set_state(struct io_stream_t *stream, enum stream_state_e new_state)
 {
-    if (new_state > STREAM_ERROR) {
+    if (new_state > STREAM_STATE_ERROR) {
         error("Invalid State (%d)", stream->state);
-        new_state = STREAM_ERROR;
+        stream->status = STREAM_ERROR_INVALID_STATE;
+        new_state = STREAM_STATE_ERROR;
     }
-
+    
     trace("%s: state change from %s to %s",
         stream->name, STREAM_STATE_PRINT(stream->state), STREAM_STATE_PRINT(new_state));
 
@@ -83,15 +86,16 @@ callback_error(void *arg)
     struct io_stream_t *stream = (struct io_stream_t *)arg;
     pthread_mutex_lock(&stream->lock);
     switch (stream->state) {
-    case STREAM_ERROR:
+    case STREAM_STATE_ERROR:
     case STREAM_FINISHING:
     case STREAM_DONE:
         break;
 
     default:
-        set_state(stream, STREAM_ERROR);
+        set_state(stream, STREAM_STATE_ERROR);
         break;
     }
+    stream->status = STREAM_ERROR;
 
     pthread_mutex_unlock(&stream->lock);
 }
@@ -308,22 +312,30 @@ start_stream(IO_STREAM h)
     return IO_SUCCESS;
 }
 
-void
+int
 join_stream(IO_STREAM h)
 {
     // Get stream from handle
     struct io_stream_t *st = get_stream(h);
     if (!st) {
         error("Stream %d not found", h);
-        return;
-    }
-    
-    while (st->state != STREAM_STOPPED) {
-        // TODO: Use condition
-        usleep(1000);
+        return STREAM_ERROR_NOT_FOUND;
     }
 
-    return;
+    pthread_join(st->thread, NULL);
+
+    return st->status;
+}
+
+int
+stream_get_status(IO_STREAM h)
+{
+    // Get stream from handle
+    struct io_stream_t *st = get_stream(h);
+    if (!st) {
+        error("Stream %d not found", h);
+        return 0;
+    }
 }
 
 static void
@@ -348,8 +360,9 @@ stop_stream_internal(struct io_stream_t *st)
         case STREAM_DONE:
             return;
 
-        case STREAM_ERROR:
+        case STREAM_STATE_ERROR:
             error("%s: Error during STOP command", st->name);
+            st->status = STREAM_ERROR_STOP_FAILURE;
             return;
 
         case STREAM_STOPPED:

@@ -10,7 +10,7 @@ IO_STREAM new_stream();
 int start_stream(IO_STREAM s);
 int stop_stream(IO_STREAM s);
 void stop_streams();
-void join_stream(IO_STREAM s);
+int join_stream(IO_STREAM s);
 void stream_cleanup();
 
 int io_stream_add_segment(IO_STREAM h, int in, int out, int flag);
