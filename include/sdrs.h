@@ -3,8 +3,10 @@
 
 #ifdef BINGEWATCH_LOCAL
 #include "machine.h"
+#include "filter.h"
 #else
 #include <bingewatch/machine.h>
+#include <bingewatch/filter.h>
 #endif
 
 /* SOAPY SDR SUPPORT */
@@ -18,7 +20,12 @@ struct soapy_args_t {
     char id_str[128];
 };
 
+int sdrrx_read(IO_FILTER_ARGS);
+int sdrrx_read_from_counter(struct sdr_channel_t *sdr, void *buf, size_t *n_samp);
+void sdrrx_enable_buffering(IO_HANDLE h, size_t n_samp, size_t n_block);
+void sdrrx_enable_buffering_rate(IO_HANDLE h, double rate);
 void sdrrx_allow_overruns(IO_HANDLE h);
+int sdrrx_reset(IO_HANDLE h);
 
 IOM *get_soapy_rx_machine();
 IO_HANDLE new_soapy_rx_machine(const char *id);

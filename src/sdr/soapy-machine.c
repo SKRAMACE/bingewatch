@@ -2,12 +2,15 @@
 #include <stdlib.h> //free
 #include <string.h>
 #include <complex.h>
+#include <pthread.h>
+#include <unistd.h>
 
 #include "machine.h"
 #include "filter.h"
 #include "sdr-machine.h"
 #include "sdrs.h"
 #include "soapy.h"
+#include "block-list-buffer.h"
 
 #define LOGEX_TAG "BW-SOAPY"
 #include "logging.h"
@@ -57,8 +60,10 @@ destroy_soapy_channel(struct sdr_channel_t *chan)
 }
 
 static int
-soapy_channel_set(struct soapy_channel_t *chan)
+soapy_channel_set(struct sdr_channel_t *sdr)
 {
+    struct soapy_channel_t *chan = (struct soapy_channel_t *)sdr;
+
     // Set antenna
     int ret = 0;
     switch(chan->antenna) {
@@ -114,10 +119,25 @@ soapy_channel_set(struct soapy_channel_t *chan)
     return IO_SUCCESS;
 }
 
+static int 
+soapy_channel_reset(struct sdr_channel_t *sdr)
+{
+    struct soapy_channel_t *c = (struct soapy_channel_t *)sdr;
+    if (SoapySDRDevice_deactivateStream(c->sdr, c->rx, 0, 0) != 0) {
+        error("Soapy Error: %s\n", SoapySDRDevice_lastError());
+        sdr->state = SDR_CHAN_ERROR;
+        return IO_ERROR;
+    }
+
+    sdr->state = SDR_CHAN_RESET;
+    return IO_SUCCESS;
+}
+
 static int
-soapy_channel_start(struct soapy_channel_t *chan)
+soapy_channel_start(struct sdr_channel_t *sdr)
 {
     int ret = IO_ERROR;
+    struct soapy_channel_t *chan = (struct soapy_channel_t *)sdr;
 
     trace("Starting channel %d:%d", chan->_sdr.device->id, chan->_sdr._d.handle);
 
@@ -163,51 +183,27 @@ do_return:
 
 // Read from device
 static int
-read_data_from_hw(IO_FILTER_ARGS)
+read_from_hw(struct sdr_channel_t *sdr, void *buf, size_t *n_samp)
 {
-    // Dereference channel from filter object
-    struct soapy_channel_t *chan = (struct soapy_channel_t *)IO_FILTER_ARGS_FILTER->obj;
-    struct sdr_channel_t *sdr = (struct sdr_channel_t *)chan;
+    struct soapy_channel_t *chan = (struct soapy_channel_t *)sdr;
 
-    switch (sdr->state) {
-    case SDR_CHAN_ERROR:
-        return IO_ERROR;
-    case SDR_CHAN_NOINIT:
-        if (soapy_channel_set(chan) < IO_SUCCESS) {
-            error("Failed to set soapy channel");
-            return IO_ERROR;
-        }
-
-        if (soapy_channel_start(chan) < IO_SUCCESS) {
-            error("Failed to start soapy channel");
-            return IO_ERROR;
-        }
-
-        sdr->state = SDR_CHAN_READY;
-        break;
-
-    case SDR_CHAN_READY:
-        break;
-    default:
-        error("Unknown sdr channel state \"%d\"", sdr->state);
-        return IO_ERROR;
-    }
-
-    float complex *data = (float complex *)IO_FILTER_ARGS_BUF;
-    void *buffs[] = {data};
-    int flags;
-    long long timeNs;
-
-    size_t remaining = *IO_FILTER_ARGS_BYTES / sizeof(complex float);
+    float complex *data = (float complex *)buf;
+    size_t remaining = *n_samp;
+    void *buffs[1];
     while (remaining) {
-        size_t n_samp = remaining;
+        *buffs = (void *)data;
+        size_t n = remaining;
+        int flags;
+        long long timeNs;
         int samples_read;
-        samples_read = SoapySDRDevice_readStream(chan->sdr, chan->rx, buffs, n_samp, &flags, &timeNs, 100000);
+        samples_read = SoapySDRDevice_readStream(chan->sdr, chan->rx, buffs, n, &flags, &timeNs, 100000);
+
+        // Handle overflow errors
         if (samples_read < 0) {
             int e = samples_read;
             const char *e_msg = SoapySDRDevice_lastError();
             error("SoapySDRDevice_readStream() error %d: %s", e, e_msg);
-            *IO_FILTER_ARGS_BYTES = 0;
+            *n_samp = 0;
             return IO_ERROR;
         }
 
@@ -217,27 +213,20 @@ read_data_from_hw(IO_FILTER_ARGS)
 
         trace("expected: %zd, actual: %zd, diff: %d, samples: %d", expected, timeNs, diff, samples_read);
         if (diff < -1 || diff > 1) {
-            if (sdr->allow_overruns) {
-                warn("data read clock mismatch: %d: lost %zd samples",
-                    diff, (size_t)((double)diff/chan->ns_per_sample));
-            } else {
-                error("data read clock mismatch: %d: lost %zd samples",
-                    diff, (size_t)((double)diff/chan->ns_per_sample));
-                goto overflow_error;
+            error("data read clock mismatch: %d: lost %zd samples",
+                diff, (size_t)((double)diff/chan->ns_per_sample));
+            if (!sdr->allow_overruns) {
+                return IO_ERROR;
             }
         } else {
             chan->error_counter = 0;
         }
 
-        remaining -= (size_t)samples_read;
         data += samples_read;
+        remaining -= (size_t)samples_read;
     }
 
     return IO_SUCCESS;
-
-overflow_error:
-    *IO_FILTER_ARGS_BYTES = 0;
-    return (++chan->error_counter > MAX_ERROR_COUNT) ? IO_ERROR : IO_SUCCESS;
 }
 
 // Device info
@@ -419,7 +408,7 @@ create_rx_filter(POOL *p, struct sdr_channel_t *chan, struct sdr_device_t *dev)
     struct io_filter_t *fdata;
 
     // Create hardware filter, and set channel descriptor as the filter object
-    fhw = create_filter(p, "_soapy_hw", read_data_from_hw);
+    fhw = create_filter(p, "_soapy_hw", sdrrx_read);
     fhw->obj = chan;
 
     if (!fhw) {
@@ -443,6 +432,16 @@ api_init(IOM *machine)
     api->_sdr.channel = create_channel;
     api->_sdr.rx_filter = create_rx_filter;
     api->_sdr.tx_filter = NULL;
+
+    if (ENVEX_EXISTS("BW_SOAPY_COUNTER_TEST")) {
+        api->_sdr.hw_read = sdrrx_read_from_counter;
+    } else {
+        api->_sdr.hw_read = read_from_hw;
+    }
+
+    api->_sdr.channel_set = soapy_channel_set;
+    api->_sdr.channel_reset = soapy_channel_reset;
+    api->_sdr.channel_start = soapy_channel_start;
     
     machine->obj = api;
 }
@@ -518,7 +517,7 @@ soapy_set_val(IO_HANDLE h, int var, double val)
         goto unlock_failure;
     }
 
-    if (soapy_channel_start(soapy) < IO_SUCCESS) {
+    if (soapy_channel_start(chan) < IO_SUCCESS) {
         goto soapy_error;
     }
 

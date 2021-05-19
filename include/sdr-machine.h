@@ -12,6 +12,8 @@ typedef  struct sdr_device_t *(*sdr_device_init)(POOL *, void *);
 typedef  struct sdr_channel_t *(*sdr_channel_init)(POOL *, struct sdr_device_t *, void *);
 typedef  struct io_filter_t *(*sdr_filter_init)(POOL *, struct sdr_channel_t *, struct sdr_device_t *);
 typedef  void (*sdr_set)(IO_HANDLE, void *);
+typedef  int (*sdr_rw)(struct sdr_channel_t *, void *, size_t *);
+typedef  int (*sdr_ref)(struct sdr_channel_t *);
 
 typedef struct sdr_api_t {
     sdr_args set_vars;
@@ -19,6 +21,10 @@ typedef struct sdr_api_t {
     sdr_channel_init channel;
     sdr_filter_init rx_filter;
     sdr_filter_init tx_filter;
+    sdr_rw hw_read;
+    sdr_ref channel_set;
+    sdr_ref channel_reset;
+    sdr_ref channel_start;
     sdr_set set_freq;
     sdr_set set_rate;
     sdr_set set_gain;
@@ -29,8 +35,15 @@ typedef void (*sdr_chan_fn)(struct sdr_channel_t *);
 
 enum sdr_chan_state_e {
     SDR_CHAN_NOINIT,
+    SDR_CHAN_RESET,
     SDR_CHAN_READY,
     SDR_CHAN_ERROR,
+};
+
+enum sdr_chan_mode_e {
+    SDR_MODE_UNBUFFERED,
+    SDR_MODE_BUFFERED,
+    SDR_MODE_ERROR,
 };
 
 struct sdr_channel_t {
@@ -45,10 +58,13 @@ struct sdr_channel_t {
     float gain;
 
     enum sdr_chan_state_e state;
+    enum sdr_chan_mode_e mode;
+
+    void *buffer;
+    void *obj;
+    size_t counter;
 
     int allow_overruns;
-    //char init;
-    //char error;
 
     sdr_chan_fn destroy_channel_impl;
 
