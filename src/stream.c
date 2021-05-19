@@ -250,7 +250,7 @@ create_segment_1_2(struct io_stream_t *st, IO_HANDLE in, IO_HANDLE out, IO_HANDL
 }
 
 int
-io_stream_add_segment(IO_STREAM h, IO_HANDLE in, IO_HANDLE out, int flag)
+io_stream_add_segment(IO_STREAM h, IO_HANDLE in, IO_HANDLE out)
 {
     // Get stream from handle
     struct io_stream_t *st = get_stream(h);
@@ -259,21 +259,13 @@ io_stream_add_segment(IO_STREAM h, IO_HANDLE in, IO_HANDLE out, int flag)
         return 1;
     }
 
-    if (flag & BW_BUFFERED) {
-        IO_HANDLE buf = new_rb_machine();
-
-        create_segment_1_1(st, in, buf);
-        create_segment_1_1(st, buf, out);
-
-    } else {
-        create_segment_1_1(st, in, out);
-    }
+    create_segment_1_1(st, in, out);
 
     return 0;
 }
 
 int
-io_stream_add_tee_segment(IO_STREAM h, IO_HANDLE in, IO_HANDLE out, IO_HANDLE out1, int flag)
+io_stream_add_tee_segment(IO_STREAM h, IO_HANDLE in, IO_HANDLE out, IO_HANDLE out1)
 {
     // Get stream from handle
     struct io_stream_t *st = get_stream(h);
@@ -282,17 +274,7 @@ io_stream_add_tee_segment(IO_STREAM h, IO_HANDLE in, IO_HANDLE out, IO_HANDLE ou
         return 1;
     }
 
-    if (flag & BW_BUFFERED) {
-        IO_HANDLE buf0 = new_rb_machine();
-        IO_HANDLE buf1 = new_rb_machine();
-
-        create_segment_1_2(st, in, buf0, buf1);
-        create_segment_1_1(st, buf0, out);
-        create_segment_1_1(st, buf1, out1);
-
-    } else {
-        create_segment_1_2(st, in, out, out1);
-    }
+    create_segment_1_2(st, in, out, out1);
 
     return 0;
 }

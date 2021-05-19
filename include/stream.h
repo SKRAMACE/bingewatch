@@ -13,8 +13,8 @@ void stop_streams();
 int join_stream(IO_STREAM s);
 void stream_cleanup();
 
-int io_stream_add_segment(IO_STREAM h, int in, int out, int flag);
-int io_stream_add_tee_segment(IO_STREAM h, int in, int out, int out1, int flag);
+int io_stream_add_segment(IO_STREAM h, int in, int out);
+int io_stream_add_tee_segment(IO_STREAM h, int in, int out, int out1);
 void stream_set_name(IO_STREAM h, const char *name);
 void stream_enable_metrics(IO_STREAM h);
 void stream_print_metrics(IO_STREAM h);
