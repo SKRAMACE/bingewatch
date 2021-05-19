@@ -32,6 +32,16 @@ struct __block_t {
     void *__block_t_impl;
 };
 
+struct blb_rw_t {
+    struct __block_t *buf;
+
+    struct __block_t *wp;   // Pointer to next write-block
+    pthread_mutex_t wlock;  // Write lock
+
+    struct __block_t *rp;   // Pointer to next read-block
+    pthread_mutex_t rlock;  // Read lock
+};
+
 // Initialization Function Type
 typedef void (*block_init)(struct __block_t *);
 typedef void (*buffer_init)(IO_DESC *);
@@ -45,10 +55,13 @@ size_t block_data_alloc(POOL *p, void *block, size_t bytes_per_block);
 size_t block_data_fastalloc(POOL *p, void *block, size_t bytes_per_block);
 
 // Buffer Management
+struct blb_rw_t *blb_init_rw(POOL *pool, size_t bytes_per_block, size_t n_blocks);
 void blb_lock(IO_HANDLE h);
 void blb_unlock(IO_HANDLE h);
 void forge_ring(void *blocklist);
 int blb_init_struct(POOL *p, IO_DESC *b);
+void blb_empty(struct __block_t *blb);
+void blb_rw_empty(struct blb_rw_t *rw);
 
 // Buffer Access
 struct io_desc *blb_get_read_desc(IO_HANDLE h);

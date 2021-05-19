@@ -188,6 +188,25 @@ forge_ring(void *blocklist)
     blocks->next = first;
 }
 
+struct blb_rw_t *
+blb_init_rw(POOL *pool, size_t bytes_per_block, size_t n_blocks)
+{
+    // Init BLB
+    struct blb_rw_t *ret = palloc(pool, sizeof(struct blb_rw_t));
+    ret->buf = block_list_alloc(pool, n_blocks);
+    block_data_fastalloc(pool, ret->buf, bytes_per_block);
+    forge_ring(ret->buf);
+
+    // Set read and write pointers
+    ret->wp = ret->buf;
+    pthread_mutex_init(&ret->wlock, NULL);
+
+    ret->rp = ret->buf;
+    pthread_mutex_init(&ret->rlock, NULL);
+
+    return ret;
+}
+
 int
 blb_init_struct(POOL *p, IO_DESC *b)
 {
@@ -209,6 +228,30 @@ blb_init_struct(POOL *p, IO_DESC *b)
     b->io_write->alloc = p;
 
     return IO_SUCCESS;
+}
+
+void
+blb_empty(struct __block_t *blb)
+{
+    struct __block_t *b = blb;
+    do {
+        b->bytes = 0;
+        b = b->next;
+    } while (b && b != blb);
+}
+
+void
+blb_rw_empty(struct blb_rw_t *rw)
+{
+    pthread_mutex_lock(&rw->rlock);
+    pthread_mutex_lock(&rw->wlock);
+
+    blb_empty(rw->buf);
+    rw->rp = rw->buf;
+    rw->wp = rw->buf;
+
+    pthread_mutex_unlock(&rw->rlock);
+    pthread_mutex_unlock(&rw->wlock);
 }
 
 void
