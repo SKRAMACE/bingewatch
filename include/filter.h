@@ -96,9 +96,10 @@ typedef struct io_filter_t {
 #define IO_FILTER_WRITE_HANDLE() IO_FILTER_HANDLE(IOF_WRITE)
 #define IO_FILTER_READ_HANDLE_JUMP(ejump) IO_FILTER_HANDLE_JUMP(IO_FILTER_READ, ejump)
 #define IO_FILTER_WRITE_HANDLE_JUMP(ejump) IO_FILTER_HANDLE_JUMP(IO_FILTER_WRITE, ejump)
-//***** TODO: MOVE TO BINGEWATCH *****//
 
-
+#define IS_IOF_RW(rw) (IO_FILTER_ARGS_FILTER->direction == rw)
+#define IS_IOF_WRITE() IS_IOF_RW(IOF_WRITE)
+#define IS_IOF_READ() IS_IOF_RW(IOF_READ)
 
 // Prototypes
 struct io_filter_t *create_filter(void *alloc, const char *name, io_filter_fn fn);

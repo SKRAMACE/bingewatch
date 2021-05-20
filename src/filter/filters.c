@@ -35,12 +35,7 @@ byte_count_limiter(IO_FILTER_ARGS)
     enum io_filter_direction dir = IO_FILTER_ARGS_FILTER->direction;
     struct generic_counter_t *limit = (struct generic_counter_t *)IO_FILTER_ARGS_FILTER->obj;
 
-    if (dir == IOF_READ) { 
-        ret = CALL_NEXT_FILTER();
-        if (ret != IO_SUCCESS) {
-            return ret;
-        }
-    }
+    IO_FILTER_READ_HANDLE();
 
     size_t bytes = *IO_FILTER_ARGS_BYTES;
 
@@ -52,9 +47,9 @@ byte_count_limiter(IO_FILTER_ARGS)
         limit->total += bytes;
     }
 
-    if (dir == IOF_WRITE) {
+    if (IS_IOF_WRITE()) {
         *IO_FILTER_ARGS_BYTES = bytes;
-        ret = CALL_NEXT_FILTER();
+        IO_FILTER_WRITE_HANDLE();
     }
 
     if (limit->total >= limit->limit) {
