@@ -237,12 +237,17 @@ blb_empty(struct __block_t *blb)
     do {
         b->bytes = 0;
         b = b->next;
+        b->state = BLB_STATE_NORMAL;
     } while (b && b != blb);
 }
 
 void
 blb_rw_empty(struct blb_rw_t *rw)
 {
+    if (!rw) {
+        return;
+    }
+
     pthread_mutex_lock(&rw->rlock);
     pthread_mutex_lock(&rw->wlock);
 
@@ -252,6 +257,35 @@ blb_rw_empty(struct blb_rw_t *rw)
 
     pthread_mutex_unlock(&rw->rlock);
     pthread_mutex_unlock(&rw->wlock);
+}
+
+void
+blb_rw_get_bytes(struct blb_rw_t *rw, size_t *size, size_t *bytes)
+{
+    if (!rw) {
+        *size = 0;
+        *bytes = 0;
+        return;
+    }
+
+    pthread_mutex_lock(&rw->rlock);
+    pthread_mutex_lock(&rw->wlock);
+
+    size_t _size = 0;
+    size_t _bytes = 0;
+
+    struct __block_t *b = rw->buf;
+    do {
+        _size += b->size;
+        _bytes += b->bytes;
+        b = b->next;
+    } while (b && b != rw->buf);
+
+    pthread_mutex_unlock(&rw->rlock);
+    pthread_mutex_unlock(&rw->wlock);
+
+    *bytes = _bytes;
+    *size = _size;
 }
 
 void

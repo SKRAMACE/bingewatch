@@ -185,10 +185,12 @@ do_return:
 static int
 read_from_hw(struct sdr_channel_t *sdr, void *buf, size_t *n_samp)
 {
+    int ret = IO_ERROR;
     struct soapy_channel_t *chan = (struct soapy_channel_t *)sdr;
 
     float complex *data = (float complex *)buf;
     size_t remaining = *n_samp;
+    size_t total_samp = 0;
     void *buffs[1];
     while (remaining) {
         *buffs = (void *)data;
@@ -204,7 +206,7 @@ read_from_hw(struct sdr_channel_t *sdr, void *buf, size_t *n_samp)
             const char *e_msg = SoapySDRDevice_lastError();
             error("SoapySDRDevice_readStream() error %d: %s", e, e_msg);
             *n_samp = 0;
-            return IO_ERROR;
+            goto do_return;
         }
 
         long long expected = (long long)(chan->expected_timestamp + .5);
@@ -213,20 +215,33 @@ read_from_hw(struct sdr_channel_t *sdr, void *buf, size_t *n_samp)
 
         trace("expected: %zd, actual: %zd, diff: %d, samples: %d", expected, timeNs, diff, samples_read);
         if (diff < -1 || diff > 1) {
-            error("data read clock mismatch: %d: lost %zd samples",
-                diff, (size_t)((double)diff/chan->ns_per_sample));
             if (!sdr->allow_overruns) {
-                return IO_ERROR;
+                error("data read clock mismatch: %d: lost %zd samples",
+                    diff, (size_t)((double)diff/chan->ns_per_sample));
+                goto do_return;
             }
+
+            debug("data read clock mismatch: %d: lost %zd samples",
+                diff, (size_t)((double)diff/chan->ns_per_sample));
+
+            ret = IO_DATABREAK;
+            if (total_samp > 0) {
+                goto do_return;
+            }
+
         } else {
             chan->error_counter = 0;
         }
 
         data += samples_read;
+        total_samp += samples_read;
         remaining -= (size_t)samples_read;
     }
+    ret = (ret < IO_SUCCESS) ? IO_SUCCESS : ret;
 
-    return IO_SUCCESS;
+do_return:
+    *n_samp = total_samp;
+    return ret;
 }
 
 // Device info

@@ -9,6 +9,8 @@
 enum block_state_e {
     BLB_STATE_NORMAL,
     BLB_STATE_DELETE,
+    BLB_STATE_BREAK,
+    BLB_STATE_ERROR,
 };
 
 // Generic Block descriptor
@@ -27,6 +29,9 @@ struct __block_t {
 
     // Block state
     enum block_state_e state;
+
+    // Data Return Val
+    int d_ret;
 
     // Placeholder for extension
     void *__block_t_impl;
@@ -62,6 +67,7 @@ void forge_ring(void *blocklist);
 int blb_init_struct(POOL *p, IO_DESC *b);
 void blb_empty(struct __block_t *blb);
 void blb_rw_empty(struct blb_rw_t *rw);
+void blb_rw_get_bytes(struct blb_rw_t *rw, size_t *size, size_t *bytes);
 
 // Buffer Access
 struct io_desc *blb_get_read_desc(IO_HANDLE h);

@@ -32,6 +32,7 @@ enum io_status {
     IO_SUCCESS=0,           // Generic success
     IO_COMPLETE,            // Machine has completed it's operations
     IO_NODATA,              // No data was available
+    IO_DATABREAK,           // Data was received, but data is non-contiguous
     IO_CONTINUE,            // Continue to next iteration
     IO_BREAK,               // Stop iterating
 

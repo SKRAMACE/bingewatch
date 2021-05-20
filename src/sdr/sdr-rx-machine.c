@@ -354,7 +354,7 @@ fill_from_hw(void *args)
 {
     // Allocate return value
     int *rval = malloc(sizeof(int));
-    *rval = IO_SUCCESS;
+    *rval = IO_ERROR;
 
     // Dereference structs
     struct hw_fill_t *hw = (struct hw_fill_t *)args;
@@ -373,25 +373,18 @@ fill_from_hw(void *args)
     //      "do_fill" is managed by caller
     while (hw->do_fill && wp->bytes == 0) {
         size_t n_samp = wp->size / sizeof(float complex);
-        int ret = api->hw_read(hw->chan, (complex float *)wp->data, &n_samp);
-        if (ret != IO_SUCCESS) {
-            *rval = ret;
-            goto do_exit;
-        }
+        wp->d_ret = api->hw_read(hw->chan, (complex float *)wp->data, &n_samp);
 
-        float *data_f = (float *)wp->data;
-        size_t N = n_samp;
-        if (data_f[0] < 16777216 && data_f[N-1] >= 16777216) {
-            for (size_t i = 0; i < N; i++) {
-                if (data_f[i] == 16777216) {
-                    debug("hello");
-                }
-            }
+        // Return immediately on error
+        if (wp->d_ret < IO_SUCCESS) {
+            *rval = wp->d_ret;
+            goto do_exit;
         }
 
         wp->bytes = n_samp * sizeof(float complex);
         wp = wp->next;
     }
+    *rval = IO_SUCCESS;
 
 do_exit:
     rw->wp = wp;
@@ -402,6 +395,8 @@ do_exit:
 static int
 read_from_buffer(struct sdr_channel_t *chan, float complex *buf, size_t *n_samp)
 {
+    int ret = IO_ERROR;
+
     // Dereference structs
     struct blb_rw_t *rw = (struct blb_rw_t *)chan->buffer; 
 
@@ -426,6 +421,7 @@ read_from_buffer(struct sdr_channel_t *chan, float complex *buf, size_t *n_samp)
     // Copy samples from input buffer
     float complex *data = buf;
     size_t remaining = *n_samp;
+    size_t total_samples = 0;
     while (remaining) {
         // Wait for data
         if (rp->bytes == 0) {
@@ -433,23 +429,42 @@ read_from_buffer(struct sdr_channel_t *chan, float complex *buf, size_t *n_samp)
             continue;
         }
 
+        if (rp->d_ret < IO_SUCCESS) {
+            rp->bytes = 0;
+            rp = rp->next;
+            ret = rp->d_ret;
+            goto do_return;
+        }
+
         size_t rp_samp = rp->bytes / sizeof(float complex);
         size_t n = (remaining >= rp_samp) ? rp_samp : remaining;
         size_t bytes = n * sizeof(float complex);
-        memcpy(data, rp->data, bytes);
 
-        float *data_f = (float *)data;
-        size_t N = bytes / sizeof(float);
-        if (data_f[0] < 16777216 && data_f[N-1] >= 16777216) {
-            for (size_t i = 0; i < N; i++) {
-                if (data_f[i] == 16777216) {
-                    debug("hello");
-                }
+        switch (rp->d_ret) {
+        case IO_SUCCESS:
+            memcpy(data, rp->data, bytes);
+            break;
+
+        case IO_DATABREAK:
+            ret = rp->d_ret;
+            if (total_samples > 0) {
+                goto do_return;
             }
+            memcpy(data, rp->data, bytes);
+            break;
+
+        default:
+            memcpy(data, rp->data, bytes);
+            total_samples += n;
+            rp->bytes = 0;
+            rp = rp->next;
+            ret = rp->d_ret;
+            goto do_return;
         }
 
         data += n;
         remaining -= n;
+        total_samples += n;
 
         // If all bytes were consumed, go to next buffer
         if (rp->bytes - bytes == 0) {
@@ -463,6 +478,12 @@ read_from_buffer(struct sdr_channel_t *chan, float complex *buf, size_t *n_samp)
             memcpy(rp->data, src, rp->bytes);
         }
     }
+
+success:
+    // Keep any value that was set during processing, otherwise set to IO_SUCCESS
+    ret = (ret < IO_SUCCESS) ? IO_SUCCESS : ret;
+
+do_return:
     rw->rp = rp;
     pthread_mutex_unlock(&rw->rlock);
 
@@ -473,8 +494,19 @@ read_from_buffer(struct sdr_channel_t *chan, float complex *buf, size_t *n_samp)
     int *ret_p;
     pthread_join(fill, (void **)&ret_p);
 
-    int ret = *ret_p;
+    // If return value is an error, return the error
+    if (*ret_p < IO_SUCCESS) {
+        ret = *ret_p;
+    }
+
+    // Free return pointer (malloc'd in pthread)
     free(ret_p);
+
+    if (ret < IO_SUCCESS) {
+        *n_samp = 0;
+    } else {
+        *n_samp = total_samples;
+    }
 
     return ret;
 }
@@ -525,7 +557,6 @@ sdrrx_read(IO_FILTER_ARGS)
     switch (chan->mode) {
     case SDR_MODE_UNBUFFERED:
         ret = api->hw_read(chan, data, &n_samp);
-        //ret = read_from_hw(soapy_chan, data, &n_samp);
         break;
     case SDR_MODE_BUFFERED:
         ret = read_from_buffer(chan, data, &n_samp);
@@ -536,14 +567,13 @@ sdrrx_read(IO_FILTER_ARGS)
     }
 
 do_return:
-    if (ret != IO_SUCCESS) {
+    if (ret < IO_SUCCESS) {
         *IO_FILTER_ARGS_BYTES = 0;
     } else {
         *IO_FILTER_ARGS_BYTES = n_samp * sizeof(float complex);
     }
 
     return ret;
-
 }
 
 int
@@ -588,6 +618,17 @@ sdrrx_reset(IO_HANDLE h) {
     SDR_API *api = (SDR_API *)d->machine->obj;
 
     struct sdr_channel_t *chan = (struct sdr_channel_t *)d;
+    switch (chan->state) {
+    case SDR_CHAN_NOINIT:
+    case SDR_CHAN_RESET:
+        return;
+    case SDR_CHAN_READY:
+    case SDR_CHAN_ERROR:
+        break;
+    derault:
+        error("Unknown channel state (%d)", chan->state);
+    }
+
     if (api->channel_reset(chan) < IO_SUCCESS) {
         error("Failed to reset channel");
         return;
@@ -643,6 +684,27 @@ sdrrx_enable_buffering_rate(IO_HANDLE h, double rate)
 
     // Call byte function
     sdrrx_enable_buffering_bytes(h, block_bytes, n_block);
+}
+
+void
+sdrrx_get_buffer_info(IO_HANDLE h, size_t *size, size_t *bytes)
+{
+    struct machine_desc_t *d = machine_get_desc(h);
+    if (!d) {
+        error("Sdr channel %d not found", h);
+        return;
+    }
+
+    struct sdr_channel_t *c = (struct sdr_channel_t *)d;
+    if (!c->buffer) {
+        error("Sdr channel %d is UNBUFFERED");
+        *size = 0;
+        *bytes = 0;
+        return;
+    }
+
+    struct blb_rw_t *rw = (struct blb_rw_t *)c->buffer;
+    blb_rw_get_bytes(rw, size, bytes);
 }
 
 void
