@@ -79,8 +79,10 @@ usrp_print_error(struct uhd_channel_t *chan)
 }
 
 static int
-uhd_channel_set(struct uhd_channel_t *chan)
+uhd_channel_set(struct sdr_channel_t *sdr)
 {
+    struct uhd_channel_t *chan = (struct uhd_channel_t *)sdr;
+
     // Set sample rate
     if (uhd_usrp_set_rx_rate(*chan->sdr, chan->_sdr.rate, chan->channel) != 0) {
         goto error;
@@ -123,59 +125,79 @@ error:
     return IO_ERROR;
 }
 
-static int
-uhd_channel_start(struct uhd_channel_t *chan)
+static int 
+uhd_channel_reset(struct sdr_channel_t *sdr)
 {
+    struct uhd_channel_t *chan = (struct uhd_channel_t *)sdr;
+
+    chan->stream_cmd.stream_mode = UHD_STREAM_MODE_STOP_CONTINUOUS;
+    if (uhd_rx_streamer_issue_stream_cmd(chan->rx_streamer, &chan->stream_cmd) != 0) {
+        error("Failed to reset UHD streamer");
+        sdr->state = SDR_CHAN_ERROR;
+        return IO_ERROR;
+    }
+
+    sdr->state = SDR_CHAN_RESET;
+    return IO_SUCCESS;
+}
+
+static int
+uhd_channel_start(struct sdr_channel_t *sdr)
+{
+    struct uhd_channel_t *chan = (struct uhd_channel_t *)sdr;
+
+    // Start Streaming
+    chan->stream_cmd.stream_mode = UHD_STREAM_MODE_START_CONTINUOUS;
     int ret = uhd_rx_streamer_issue_stream_cmd(chan->rx_streamer, &chan->stream_cmd);
     if (ret != 0) {
         goto error;
     }
+    trace("Starting channel %d:%d", chan->_sdr.device->id, chan->_sdr._d.handle);
 
-    // TODO: RUN UNTIL NO OVERFLOWS
-    //uhd_rx_streamer_recv(chan->rx_streamer, buffs, n_samp, chan->rx_metadata, UHD_RX_TIMEOUT, false, &read_samp);
+    double ts = 0.01;
+    size_t n_samp = (size_t)(chan->_sdr.rate * ts);
+    char *data = malloc(n_samp * sizeof(float complex));
+    int overflow = 0;
+    do {
+        size_t read_samp;
+        void **buffs = (void **)&data;
+        uhd_rx_streamer_recv(chan->rx_streamer, buffs, n_samp, &chan->rx_metadata, UHD_RX_TIMEOUT, false, &read_samp);
 
+        uhd_rx_metadata_error_code_t error_code;
+        if (uhd_rx_metadata_error_code(chan->rx_metadata, &error_code) != 0) {
+            error("Stream error (RX metadata)");
+            goto error;
+        }
+
+        if (UHD_RX_METADATA_ERROR_CODE_NONE == error_code) {
+            overflow = 0;
+        } else if(UHD_RX_METADATA_ERROR_CODE_OVERFLOW == error_code) {
+            overflow = 1;
+        } else {
+            goto error;
+        }
+    } while (overflow);
+
+    free(data);
     return IO_SUCCESS;
 
 error:
+    free(data);
     usrp_print_error(chan);
     return IO_ERROR;
 }
 
 // Read from device
 static int
-read_data_from_hw(IO_FILTER_ARGS)
+read_from_hw(struct sdr_channel_t *sdr, void *buf, size_t *n_samp)
 {
-    // Dereference channel from filter object
-    struct uhd_channel_t *chan = (struct uhd_channel_t *)IO_FILTER_ARGS_FILTER->obj;
-    struct sdr_channel_t *sdr = (struct sdr_channel_t *)chan;
+    int ret = IO_ERROR;
+    struct uhd_channel_t *chan = (struct uhd_channel_t *)sdr;
 
-    switch (sdr->state) {
-    case SDR_CHAN_ERROR:
-        return IO_ERROR;
-    case SDR_CHAN_NOINIT:
-        if (uhd_channel_set(chan) < IO_SUCCESS) {
-            error("Failed to set soapy channel");
-            return IO_ERROR;
-        }
-
-        if (uhd_channel_start(chan) < IO_SUCCESS) {
-            error("Failed to start soapy channel");
-            return IO_ERROR;
-        }
-
-        sdr->state = SDR_CHAN_READY;
-        break;
-
-    case SDR_CHAN_READY:
-        break;
-    default:
-        error("Unknown sdr channel state \"%d\"", sdr->state);
-        return IO_ERROR;
-    }
-
-    float complex *data = (float complex *)IO_FILTER_ARGS_BUF;
-    size_t remaining = *IO_FILTER_ARGS_BYTES / sizeof(complex float);
-    while (remaining > 0) {
+    float complex *data = (float complex *)buf;
+    size_t remaining = *n_samp;
+    size_t total_samp = 0;
+    while (remaining) {
         size_t n_samp = remaining;
 
         size_t read_samp;
@@ -223,25 +245,31 @@ read_data_from_hw(IO_FILTER_ARGS)
         }
 
         if (overflow) {
-            if (sdr->allow_overruns) {
-                warn("overflow");
-            } else {
-                error("overflow");
-                goto overflow_error;
+            if (!sdr->allow_overruns) {
+                error("Overrun Detected");
+                goto do_return;
             }
+
+            debug("Overrun Detected");
+
+            ret = IO_DATABREAK;
+            if (total_samp > 0) {
+                goto do_return;
+            }
+
         } else {
             chan->error_counter = 0;
         }
 
         data += read_samp;
+        total_samp += read_samp;
         remaining -= read_samp;
     }
+    ret = (ret < IO_SUCCESS) ? IO_SUCCESS : ret;
 
-    return IO_SUCCESS;
-
-overflow_error:
-    *IO_FILTER_ARGS_BYTES = 0;
-    return (++chan->error_counter > MAX_ERROR_COUNT) ? IO_ERROR : IO_SUCCESS;
+do_return:
+    *n_samp = total_samp;
+    return ret;
 }
 
 /* Example device info
@@ -348,7 +376,7 @@ create_rx_filter(POOL *p, struct sdr_channel_t *chan, struct sdr_device_t *dev)
     struct io_filter_t *fdata;
 
     // Create hardware filter, and set channel descriptor as the filter object
-    fhw = create_filter(p, "_uhd_hw", read_data_from_hw);
+    fhw = create_filter(p, "_uhd_hw", sdrrx_read);
     fhw->obj = chan;
 
     if (!fhw) {
@@ -372,7 +400,17 @@ api_init(IOM *machine)
     api->_sdr.channel = create_channel;
     api->_sdr.rx_filter = create_rx_filter;
     api->_sdr.tx_filter = NULL;
-    
+
+    if (ENVEX_EXISTS("BW_UHD_COUNTER_TEST")) {
+        api->_sdr.hw_read = sdrrx_read_from_counter;
+    } else {
+        api->_sdr.hw_read = read_from_hw;
+    }
+  
+    api->_sdr.channel_set = uhd_channel_set;
+    api->_sdr.channel_reset = uhd_channel_reset;
+    api->_sdr.channel_start = uhd_channel_start;
+
     machine->obj = api;
 }
 
@@ -442,7 +480,7 @@ uhd_set_val(IO_HANDLE h, int var, double val)
     }
 
     uhd->stream_cmd.stream_mode = UHD_STREAM_MODE_START_CONTINUOUS;
-    if (uhd_channel_start(uhd) < IO_SUCCESS) {
+    if (uhd_channel_start(chan) < IO_SUCCESS) {
         goto error;
     }
 
