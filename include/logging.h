@@ -14,6 +14,7 @@ void sdrrx_set_log_level(char *level);
 
 void lime_set_log_level(char *level);
 void soapy_set_log_level(char *level);
+void rtlsdr_set_log_level(char *level);
 
 void b210_set_log_level(char *level);
 void uhd_set_log_level(char *level);

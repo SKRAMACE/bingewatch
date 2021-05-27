@@ -9,6 +9,15 @@
 #include <bingewatch/filter.h>
 #endif
 
+/* GENERIC SDR SUPPORT */
+int sdrrx_read(IO_FILTER_ARGS);
+int sdrrx_read_from_counter(struct sdr_channel_t *sdr, void *buf, size_t *n_samp);
+void sdrrx_enable_buffering(IO_HANDLE h, size_t n_samp, size_t n_block);
+void sdrrx_enable_buffering_rate(IO_HANDLE h, double rate);
+void sdrrx_get_buffer_info(IO_HANDLE h, size_t *size, size_t *bytes);
+void sdrrx_allow_overruns(IO_HANDLE h);
+int sdrrx_reset(IO_HANDLE h);
+
 /* SOAPY SDR SUPPORT */
 extern const IOM *soapy_rx_machine;
 
@@ -19,14 +28,6 @@ enum supported_soapy_types_e {
 struct soapy_args_t {
     char id_str[128];
 };
-
-int sdrrx_read(IO_FILTER_ARGS);
-int sdrrx_read_from_counter(struct sdr_channel_t *sdr, void *buf, size_t *n_samp);
-void sdrrx_enable_buffering(IO_HANDLE h, size_t n_samp, size_t n_block);
-void sdrrx_enable_buffering_rate(IO_HANDLE h, double rate);
-void sdrrx_get_buffer_info(IO_HANDLE h, size_t *size, size_t *bytes);
-void sdrrx_allow_overruns(IO_HANDLE h);
-int sdrrx_reset(IO_HANDLE h);
 
 IOM *get_soapy_rx_machine();
 IO_HANDLE new_soapy_rx_machine(const char *id);
@@ -70,5 +71,18 @@ void b210_rx_set_gain(IO_HANDLE h, float lna);
 int b210_rx_set_freq(IO_HANDLE h, double freq);
 int b210_rx_set_samp_rate(IO_HANDLE h, double samp_rate);
 int b210_rx_set_bandwidth(IO_HANDLE h, double bandwidth);
+
+/* RTL SDR SUPPORT */
+extern const IOM *rtlsdr_rx_machine;
+IOM *get_rtlsdr_rx_machine();
+IO_HANDLE new_rtlsdr_rx_machine(const char *id);
+void rtlsdr_set_rx(IO_HANDLE h, double freq, double rate, double bandwidth);
+
+void rtlsdr_rx_set_gain(IO_HANDLE h, float lna);
+int rtlsdr_rx_set_freq(IO_HANDLE h, double freq);
+int rtlsdr_rx_set_samp_rate(IO_HANDLE h, double samp_rate);
+int rtlsdr_rx_set_bandwidth(IO_HANDLE h, double bandwidth);
+int rtlsdr_rx_set_ppm(IO_HANDLE h, double ppm);
+int rtlsdr_rx_set_testmode(IO_HANDLE h);
 
 #endif

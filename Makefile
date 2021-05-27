@@ -106,6 +106,9 @@ libbingewatch_soapy: $(LIB) soapy-machine.c lime-machine.c
 libbingewatch_uhd: $(LIB) uhd-machine.c b210-machine.c
 	$(CC) $(CFLAGS) $^ $(INC) $(LDFLAGS) $(LCFLAGS) -o $@
 
+libbingewatch_rtlsdr: $(LIB) rtlsdr-machine.c
+	$(CC) $(CFLAGS) $^ $(INC) $(LDFLAGS) $(LCFLAGS) -o $@
+
 %.o: %.c
 	$(CC) $(CFLAGS) $(INC) -I/usc/local/include -Werror -ggdb -c $^
 
