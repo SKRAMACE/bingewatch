@@ -3,9 +3,9 @@
 #include <envex.h>
 #include <complex.h>
 
+#include "sdrs.h"
 #include "simple-machines.h"
 #include "simple-filters.h"
-#include "sdrs.h"
 #include "stream.h"
 #include "test.h"
 #include "logging.h"
@@ -47,7 +47,8 @@ restart_test()
 {
     int ret = 1;
 
-    size_t bytes = (size_t)(defaults.samp_rate * .01);
+    size_t n_samp = (size_t)(defaults.samp_rate * .01);
+    size_t bytes = n_samp * sizeof(float complex);
     char *buf = malloc(bytes);
 
     IO_HANDLE lime = 0;
@@ -56,11 +57,12 @@ restart_test()
 
         size_t remaining = (size_t)defaults.samp_rate;
         while (remaining) {
-            size_t b = (bytes < remaining) ? bytes : remaining;
+            size_t n = (n_samp < remaining) ? n_samp : remaining;
+            size_t b = n * sizeof(float complex);
             if (lime_rx_machine->read(lime, buf, &b) < IO_SUCCESS) {
                 goto do_return;
             }
-            remaining -= b;
+            remaining -= n;
         }
 
         lime_teardown(lime);
@@ -83,18 +85,20 @@ read_test()
 {
     int ret = 1;
 
-    size_t bytes = (size_t)(defaults.samp_rate * .01);
+    size_t n_samp = (size_t)(defaults.samp_rate * .01);
+    size_t bytes = n_samp * sizeof(float complex);
     char *buf = malloc(bytes);
 
     IO_HANDLE lime = lime_setup();
 
     size_t remaining = (size_t)defaults.samp_rate;
     while (remaining) {
-        size_t b = (bytes < remaining) ? bytes : remaining;
+        size_t n = (n_samp < remaining) ? n_samp : remaining;
+        size_t b = n * sizeof(float complex);
         if (lime_rx_machine->read(lime, buf, &b) < IO_SUCCESS) {
             goto do_return;
         }
-        remaining -= b;
+        remaining -= n;
     }
 
     ret = 0;
@@ -114,7 +118,8 @@ stream_test()
 {
     int ret = 1;
 
-    size_t bytes = (size_t)(defaults.samp_rate * .01);
+    size_t n_samp = (size_t)(defaults.samp_rate * .01);
+    size_t bytes = n_samp * sizeof(float complex);
     char *buf = malloc(bytes);
 
     IO_HANDLE lime = lime_setup();
@@ -123,15 +128,16 @@ stream_test()
     //IO_HANDLE out = new_file_write_machine(bw_test_rootdir, "lime-stream-test", "cfile");
 
     IO_STREAM stream = new_stream();
-    io_stream_add_segment(stream, lime, out, BW_NOFLAGS);
+    io_stream_add_segment(stream, lime, out);
 
     size_t remaining = (size_t)defaults.samp_rate;
     while (remaining) {
-        size_t b = (bytes < remaining) ? bytes : remaining;
+        size_t n = (n_samp < remaining) ? n_samp : remaining;
+        size_t b = n * sizeof(float complex);
         if (lime_rx_machine->read(lime, buf, &b) < IO_SUCCESS) {
             goto do_return;
         }
-        remaining -= b;
+        remaining -= n;
     }
 
     ret = 0;
@@ -154,7 +160,7 @@ overflow_test()
     IO_HANDLE lime = lime_setup();
     IO_HANDLE out = new_file_write_machine(bw_test_rootdir, "lime-stream-test", "cfile");
     IO_STREAM stream = new_stream();
-    io_stream_add_segment(stream, lime, out, BW_NOFLAGS);
+    io_stream_add_segment(stream, lime, out);
 
     size_t bytes_per_second = (size_t)(defaults.samp_rate * sizeof(float complex));
     size_t seconds = 1;
@@ -176,6 +182,8 @@ do_return:
 int
 main(int nargs, char *argv[])
 {
+    critical("THIS TEST IS OUT OF DATE, AND NEEDS DEVELOPER REVIEW");
+
     char *log_level;
     ENVEX_TOSTR_UPPER(log_level, "BW_TEST_UNIT_LOG_LEVEL", "error");
     set_log_level_str(log_level);
