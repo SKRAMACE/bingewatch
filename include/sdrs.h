@@ -11,7 +11,6 @@
 
 /* GENERIC SDR SUPPORT */
 int sdrrx_read(IO_FILTER_ARGS);
-int sdrrx_read_from_counter(struct sdr_channel_t *sdr, void *buf, size_t *n_samp);
 void sdrrx_enable_buffering(IO_HANDLE h, size_t n_samp, size_t n_block);
 void sdrrx_enable_buffering_rate(IO_HANDLE h, double rate);
 void sdrrx_get_buffer_info(IO_HANDLE h, size_t *size, size_t *bytes);

@@ -577,7 +577,7 @@ do_return:
 }
 
 int
-sdrrx_read_from_counter(struct sdr_channel_t *sdr, void *buf, size_t *n_samp)
+sdr_read_from_counter(struct sdr_channel_t *sdr, void *buf, size_t *n_samp)
 {
     float *data = (float *)buf;
 

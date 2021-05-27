@@ -94,5 +94,6 @@ struct sdr_device_t {
 void sdr_init_machine_functions(IOM *machine);
 void sdr_init_api_functions(IOM *machine, SDR_API *api);
 IO_HANDLE sdr_create(IOM *machine, void *arg);
+int sdr_read_from_counter(struct sdr_channel_t *sdr, void *buf, size_t *n_samp);
 
 #endif

@@ -449,7 +449,7 @@ api_init(IOM *machine)
     api->_sdr.tx_filter = NULL;
 
     if (ENVEX_EXISTS("BW_SOAPY_COUNTER_TEST")) {
-        api->_sdr.hw_read = sdrrx_read_from_counter;
+        api->_sdr.hw_read = sdr_read_from_counter;
     } else {
         api->_sdr.hw_read = read_from_hw;
     }
