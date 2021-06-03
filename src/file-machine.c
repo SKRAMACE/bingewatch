@@ -15,7 +15,8 @@
 #include "filter.h"
 
 #define FILE_IOM_MAX_STRLEN 1024
-#define FILE_IOM_MAX_PATHLEN 2048
+#define FILE_IOM_MAX_DIRLEN 2048
+#define FILE_IOM_MAX_PATHLEN 4096
 #define TIMESTAMP_FMT "%Y/%m/%d/%H"
 #define BASEDIR_INDEX_NOINIT 0xffffffff
 
@@ -248,15 +249,15 @@ open_file(struct file_desc_t *fd, uint32_t rw)
     }
 
     // Try to create directory
-    char path[FILE_IOM_MAX_PATHLEN];
-    size_t len = FILE_IOM_MAX_PATHLEN;
+    char path[FILE_IOM_MAX_DIRLEN+2];
+    size_t len = FILE_IOM_MAX_DIRLEN;
     build_directory_path(fd, path, &len);
     if (create_dir(path) != 0) {
         printf("ERROR: Failed to create directory \"%s\"\n", path);
         return 1;
     }
 
-    char fname[FILE_IOM_MAX_PATHLEN];
+    char fname[FILE_IOM_MAX_PATHLEN+2];
 
     // Open write file
     if (FFILE_WRITE == rw) {
@@ -672,7 +673,7 @@ new_file_read_machine(char *fname)
         return 0;
     }
 
-    if (len > FILE_IOM_MAX_PATHLEN) {
+    if (len >= FILE_IOM_MAX_PATHLEN) {
         printf("Filename exceeded max length (%d > %d)\n", len, FILE_IOM_MAX_PATHLEN);
         return 0;
     }
