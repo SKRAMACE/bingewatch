@@ -648,8 +648,30 @@ sdrrx_enable_buffering_bytes(IO_HANDLE h, size_t bytes_per_block, size_t n_block
     }
 
     struct sdr_channel_t *c = (struct sdr_channel_t *)d;
-    c->mode = SDR_MODE_BUFFERED;
+    if (c->buffer) {
+        blb_rw_destroy(c->buffer);
+        c->buffer = NULL;
+    }
     c->buffer = blb_init_rw(d->pool, bytes_per_block, n_blocks);
+    c->mode = SDR_MODE_BUFFERED;
+}
+
+void
+sdrrx_disable_buffering(IO_HANDLE h)
+{
+    struct machine_desc_t *d = machine_get_desc(h);
+    if (!d) {
+        error("Sdr channel %d not found", h);
+        return;
+    }
+
+    struct sdr_channel_t *c = (struct sdr_channel_t *)d;
+    if (c->buffer) {
+        blb_rw_destroy(c->buffer);
+        c->buffer = NULL;
+    }
+
+    c->mode = SDR_MODE_UNBUFFERED;
 }
 
 void
