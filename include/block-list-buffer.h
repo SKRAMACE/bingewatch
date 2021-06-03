@@ -38,6 +38,8 @@ struct __block_t {
 };
 
 struct blb_rw_t {
+    void *pool;
+
     struct __block_t *buf;
 
     struct __block_t *wp;   // Pointer to next write-block
@@ -61,6 +63,7 @@ size_t block_data_fastalloc(POOL *p, void *block, size_t bytes_per_block);
 
 // Buffer Management
 struct blb_rw_t *blb_init_rw(POOL *pool, size_t bytes_per_block, size_t n_blocks);
+void blb_rw_destroy(struct blb_rw_t *rw);
 void blb_lock(IO_HANDLE h);
 void blb_unlock(IO_HANDLE h);
 void forge_ring(void *blocklist);

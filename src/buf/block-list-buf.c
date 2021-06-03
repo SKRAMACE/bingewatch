@@ -191,10 +191,14 @@ forge_ring(void *blocklist)
 struct blb_rw_t *
 blb_init_rw(POOL *pool, size_t bytes_per_block, size_t n_blocks)
 {
+    POOL *p = create_subpool(pool);
+
     // Init BLB
-    struct blb_rw_t *ret = palloc(pool, sizeof(struct blb_rw_t));
-    ret->buf = block_list_alloc(pool, n_blocks);
-    block_data_fastalloc(pool, ret->buf, bytes_per_block);
+    struct blb_rw_t *ret = palloc(p, sizeof(struct blb_rw_t));
+    ret->pool = p;
+
+    ret->buf = block_list_alloc(p, n_blocks);
+    block_data_fastalloc(p, ret->buf, bytes_per_block);
     forge_ring(ret->buf);
 
     // Set read and write pointers
@@ -205,6 +209,17 @@ blb_init_rw(POOL *pool, size_t bytes_per_block, size_t n_blocks)
     pthread_mutex_init(&ret->rlock, NULL);
 
     return ret;
+}
+
+void
+blb_rw_destroy(struct blb_rw_t *rw)
+{
+    if (!rw) {
+        return;
+    }
+
+    POOL *freeme = rw->pool;
+    free_pool(freeme);
 }
 
 int
