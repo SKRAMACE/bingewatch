@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <envex.h>
+#include <memex.h>
 #include <complex.h>
 
 #include "sdrs.h"
@@ -40,6 +41,43 @@ lime_teardown(IO_HANDLE lime)
         lime_rx_machine->stop(lime);
         lime_rx_machine->destroy(lime);
     }
+}
+
+static int
+gain_test()
+{
+    IO_HANDLE lime = lime_setup();
+    POOL *pool = create_pool();
+
+    struct lime_gain_t {
+        float lna;
+        float pga;
+        float tia;
+    } model = {0,0,0};
+
+    lime_rx_set_gain_model(lime, &model);
+
+    while (lime_rx_gain_inc(lime) == 0) {
+        struct lime_gain_t *check = lime_rx_get_gain_model(lime, pool);
+
+        float g;
+        lime_rx_get_net_gain(lime, &g);
+
+        info("gain=%f, lna=%0.2f, pga=%0.2f, tia=%0.2f", g, check->lna, check->pga, check->tia);
+    }
+
+    while (lime_rx_gain_dec(lime) == 0) {
+        struct lime_gain_t *check = lime_rx_get_gain_model(lime, pool);
+
+        float g;
+        lime_rx_get_net_gain(lime, &g);
+
+        info("gain=%f, lna=%0.2f, pga=%0.2f, tia=%0.2f", g, check->lna, check->pga, check->tia);
+    }
+
+    lime_teardown(lime);
+    free_pool(pool);
+    return 0;
 }
 
 static int
@@ -188,10 +226,11 @@ main(int nargs, char *argv[])
     ENVEX_TOSTR_UPPER(log_level, "BW_TEST_UNIT_LOG_LEVEL", "error");
     set_log_level_str(log_level);
 
-    lime_set_log_level("warn"); 
+    lime_set_log_level("info"); 
 
     test_setup();
 
+    test_add(gain_test);
     test_add(restart_test);
     test_add(read_test);
     test_add(stream_test);
