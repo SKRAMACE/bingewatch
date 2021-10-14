@@ -469,6 +469,47 @@ soapy_create(void *args)
 }
 
 static int
+soapy_set_gain_model(struct soapy_channel_t *soapy, BW_GAIN model)
+{
+    int ret = 1;
+
+    struct sdr_channel_t *chan = &soapy->_sdr;
+    IO_DESC *d = (IO_DESC *)chan;
+
+    while (d->in_use) {
+        continue;
+    }
+
+    pthread_mutex_lock(&d->lock);
+    if (SDR_CHAN_NOINIT == chan->state) {
+        goto success;
+    }
+
+    SDR_API *api = (SDR_API *)_soapy_rx_machine->obj;
+    api->set_gain_model(d->handle, model);
+
+    SoapySDRDevice_deactivateStream(soapy->sdr, soapy->rx, 0, 0);
+
+    if (soapy_channel_start(chan) < IO_SUCCESS) {
+        goto soapy_error;
+    }
+
+success:
+    pthread_mutex_unlock(&d->lock);
+    return 0;
+
+soapy_error:
+    error("Soapy Error: %s\n", SoapySDRDevice_lastError());
+    chan->state = SDR_CHAN_ERROR;
+
+unlock_failure:
+    pthread_mutex_unlock(&d->lock);
+failure:
+    return 1;
+}
+
+
+static int
 soapy_set_val(IO_HANDLE h, int var, double val)
 {
     int ret = 1;
@@ -574,6 +615,17 @@ soapy_rx_set_ppm(IO_HANDLE h, double ppm)
     return soapy_set_val(h, SOAPY_VAR_PPM, ppm);
 }
 
+int
+soapy_rx_set_gain_model(IO_HANDLE h, BW_GAIN model)
+{
+    struct soapy_channel_t *soapy = soapy_get_channel(h);
+    if (!soapy) {
+        return 1;
+    }
+
+    return soapy_set_gain_model(soapy, model);
+}
+
 static void
 soapy_log_init()
 {
@@ -630,6 +682,49 @@ soapy_get_channel(IO_HANDLE h)
     }
 
     return (struct soapy_channel_t *)d;
+}
+
+int
+soapy_rx_set_gain_elem(IO_HANDLE h, const char *elem, float gain)
+{
+    struct soapy_channel_t *chan = soapy_get_channel(h);
+    if (!chan) {
+        goto failure;
+    }
+
+    // Set gain (LNA gain)
+    if (SoapySDRDevice_setGainElement(chan->sdr, SOAPY_SDR_RX, 0, elem, gain) != 0) {
+        error("setGainElement fail: %s", SoapySDRDevice_lastError());
+        goto failure;
+    }
+
+    return IO_SUCCESS;
+
+failure:
+    return IO_ERROR;
+}
+
+int
+soapy_rx_get_gain_elem(IO_HANDLE h, const char *elem, float *gain)
+{
+    struct soapy_channel_t *chan = soapy_get_channel(h);
+    if (!chan) {
+        return IO_ERROR;
+    }
+
+    // TODO: HOW TO DETECT AN ERROR
+    *gain = (float)SoapySDRDevice_getGainElement(chan->sdr, SOAPY_SDR_RX, 0, elem);
+    return IO_SUCCESS;
+}
+
+void
+soapy_gain_elem_info(IO_HANDLE h, const char *elem)
+{
+    struct soapy_channel_t *chan = soapy_get_channel(h);
+    if (chan) {
+        SoapySDRRange r = SoapySDRDevice_getGainElementRange(chan->sdr, SOAPY_SDR_RX, 0, elem);
+        info("%s Gain Range: min=%0.2f, max=%0.2f, step=%0.2f", elem, r.minimum, r.maximum, r.step);
+    }
 }
 
 void

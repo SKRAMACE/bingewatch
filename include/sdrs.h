@@ -9,6 +9,8 @@
 #include <bingewatch/filter.h>
 #endif
 
+typedef void * BW_GAIN;
+
 /* GENERIC SDR SUPPORT */
 int sdrrx_read(IO_FILTER_ARGS);
 void sdrrx_enable_buffering(IO_HANDLE h, size_t n_samp, size_t n_block);
@@ -37,16 +39,26 @@ int soapy_rx_set_freq(IO_HANDLE h, double freq);
 int soapy_rx_set_samp_rate(IO_HANDLE h, double samp_rate);
 int soapy_rx_set_bandwidth(IO_HANDLE h, double bandwidth);
 int soapy_rx_set_ppm(IO_HANDLE h, double ppm);
+int soapy_rx_set_gain_elem(IO_HANDLE h, const char *elem, float gain);
+int soapy_rx_get_gain_elem(IO_HANDLE h, const char *elem, float *gain);
+void soapy_gain_elem_info(IO_HANDLE h, const char *elem);
 
 /* LIME SDR SUPPORT */
 extern const IOM *lime_rx_machine;
 
+void lime_gain_info(IO_HANDLE h);
 void lime_set_gains(IO_HANDLE h, float lna, float tia, float pga);
 void lime_set_rx(IO_HANDLE h, double freq, double rate, double bandwidth);
 int lime_rx_set_freq(IO_HANDLE h, double freq);
 int lime_rx_set_samp_rate(IO_HANDLE h, double samp_rate);
 int lime_rx_set_bandwidth(IO_HANDLE h, double bandwidth);
 int lime_rx_set_ppm(IO_HANDLE h, double ppm);
+int lime_rx_set_gain_model(IO_HANDLE h, BW_GAIN model);
+int lime_rx_gain_inc(IO_HANDLE h);
+int lime_rx_gain_dec(IO_HANDLE h);
+int lime_rx_get_net_gain(IO_HANDLE h, float *gain);
+
+BW_GAIN lime_rx_get_gain_model(IO_HANDLE h, POOL *pool);
 IO_HANDLE new_lime_rx_machine();
 
 /* UHD SDR SUPPORT */

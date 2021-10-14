@@ -28,6 +28,11 @@ typedef struct sdr_api_t {
     sdr_set set_freq;
     sdr_set set_rate;
     sdr_set set_gain;
+    void *(*get_gain_model)(IO_HANDLE, POOL *);
+    void (*set_gain_model)(IO_HANDLE, void *);
+    float (*get_net_gain)(IO_HANDLE);
+    int (*gain_inc)(IO_HANDLE);
+    int (*gain_dec)(IO_HANDLE);
     void *_impl;
 } SDR_API;
 

@@ -350,6 +350,40 @@ set_gain(IO_HANDLE h, void *gain)
 }
 
 static void *
+get_gain_model(IO_HANDLE h, POOL *pool)
+{
+    error("get_gain_model() not implemented");
+    return NULL;
+}
+
+static void
+set_gain_model(IO_HANDLE h, void *gm)
+{
+    error("set_gain_model() not implemented");
+}
+
+static int
+gain_inc(IO_HANDLE h)
+{
+    error("gain_inc() not implemented");
+    return 0;
+}
+
+static int
+gain_dec(IO_HANDLE h)
+{
+    error("gain_dec() not implemented");
+    return 0;
+}
+
+static float
+get_gain(IO_HANDLE h)
+{
+    struct sdr_channel_t *chan = get_channel(h);
+    return chan->gain;
+}
+
+static void *
 fill_from_hw(void *args)
 {
     // Allocate return value
@@ -596,6 +630,11 @@ sdr_init_api_functions(IOM *machine, SDR_API *api)
     api->set_freq = set_freq;
     api->set_rate = set_rate;
     api->set_gain = set_gain;
+    api->gain_inc = gain_inc;
+    api->gain_dec = gain_dec;
+    api->set_gain_model = set_gain_model;
+    api->get_gain_model = get_gain_model;
+    api->get_net_gain = get_gain;
 }
 
 void
