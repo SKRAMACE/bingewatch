@@ -469,7 +469,7 @@ soapy_create(void *args)
 }
 
 static int
-soapy_set_gain_model(struct soapy_channel_t *soapy, BW_GAIN model)
+soapy_set_gain_model(struct soapy_channel_t *soapy, GAIN_MODEL *model)
 {
     int ret = 1;
 
@@ -616,7 +616,7 @@ soapy_rx_set_ppm(IO_HANDLE h, double ppm)
 }
 
 int
-soapy_rx_set_gain_model(IO_HANDLE h, BW_GAIN model)
+soapy_rx_set_gain_model(IO_HANDLE h, GAIN_MODEL *model)
 {
     struct soapy_channel_t *soapy = soapy_get_channel(h);
     if (!soapy) {

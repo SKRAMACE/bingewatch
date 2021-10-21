@@ -5,10 +5,16 @@
 #include "logging.h"
 #include "bw-log.h"
 
+#define ASSERT_LIME_MODEL(m,r) \
+    if (m->type != GM_TYPE_LIME) {\
+        error("Incompatible gain model type: expected %d, got %d", GM_TYPE_LIME, m->type); \
+        return r; }
+
 const IOM *lime_rx_machine;
 static IOM *_lime_rx_machine = NULL;
 
 struct lime_gain_model_t {
+    struct bw_gain_model_t _gm;
     float lna;
     float pga;
     float tia;
@@ -28,13 +34,6 @@ set_gain_model_internal(IO_HANDLE h, struct lime_gain_model_t *model)
     if (soapy_rx_set_gain_elem(h, "TIA", model->tia) != 0) {
         return;
     }
-}
-
-static void
-set_gain_model(IO_HANDLE h, BW_GAIN model)
-{
-    struct lime_gain_model_t *m = (struct lime_gain_model_t *)model;
-    set_gain_model_internal(h, m);
 }
 
 static int
@@ -62,120 +61,86 @@ failure:
     return 1;
 }
 
-static BW_GAIN
-get_gain_model(IO_HANDLE h, POOL *pool)
-{
-    struct lime_gain_model_t m;
-    if (get_gain_model_internal(h, &m) != 0) {
-        return NULL;
-    }
-
-    struct lime_gain_model_t *model = pcalloc(pool, sizeof(struct lime_gain_model_t));
-    model->lna = m.lna;
-    model->pga = m.pga;
-    model->tia = m.tia;
-
-    return (BW_GAIN)model;
-}
-
-static float
-get_net_gain(IO_HANDLE h)
+int
+lime_rx_get_net_gain(IO_HANDLE h, float *gain)
 {
     float lna, pga, tia;
     if (soapy_rx_get_gain_elem(h, "LNA", &lna) != 0) {
         lna = 0;
         error("Failed to get LNA gain");
+        return 1;
     }
 
     if (soapy_rx_get_gain_elem(h, "PGA", &pga) != 0) {
         pga = 0;
         error("Failed to get PGA gain");
+        return 1;
     }
 
     if (soapy_rx_get_gain_elem(h, "TIA", &tia) != 0) {
         tia = 0;
         error("Failed to get TIA gain");
+        return 1;
     }
 
-    return lna + pga + tia;
+    *gain = lna + pga + tia;
+    return 0;
 }
 
 int
-lime_rx_get_net_gain(IO_HANDLE h, float *gain)
+lime_rx_gain_inc(GAIN_MODEL *model)
 {
-    *gain = get_net_gain(h);
-}
+    ASSERT_LIME_MODEL(model,-1);
+    struct lime_gain_model_t *m = (struct lime_gain_model_t *)model;
 
-static int
-gain_inc(IO_HANDLE h)
-{
     int max = 0;
-
-    struct lime_gain_model_t m;
-    get_gain_model_internal(h, &m);
-
     float inc = 3.0;
 
-    float lna = 30.0 - m.lna;
+    float lna = 30.0 - m->lna;
     if (lna >= inc) {
-        m.lna += inc;
-        goto set_gain;
+        m->lna += inc;
+        goto do_return;
     }
-    m.lna += lna;
+    m->lna += lna;
     inc -= lna;
 
-    float pga = 19.0 - m.pga;
+    float pga = 19.0 - m->pga;
     if (pga >= inc) {
-        m.pga += inc;
-        goto set_gain;
+        m->pga += inc;
+        goto do_return;
     }
-    m.pga += pga;
+    m->pga += pga;
     max = 1;
 
-set_gain:
-    set_gain_model_internal(h, &m);
+do_return:
     return max;
 }
 
 int
-lime_rx_gain_inc(IO_HANDLE h)
+lime_rx_gain_dec(GAIN_MODEL *model)
 {
-    return gain_inc(h);
-}
+    ASSERT_LIME_MODEL(model,-1);
+    struct lime_gain_model_t *m = (struct lime_gain_model_t *)model;
 
-static int
-gain_dec(IO_HANDLE h)
-{
     int min = 0;
-
-    struct lime_gain_model_t m;
-    get_gain_model_internal(h, &m);
-
     float dec = 3.0;
 
-    if (m.pga >= dec) {
-        m.pga -= dec;
-        goto set_gain;
+    if (m->pga >= dec) {
+        m->pga -= dec;
+        goto do_return;
     }
-    dec -= m.pga;
-    m.pga = 0;
+    dec -= m->pga;
+    m->pga = 0;
 
-    if (m.lna >= dec) {
-        m.lna -= dec;
-        goto set_gain;
+    if (m->lna >= dec) {
+        m->lna -= dec;
+        goto do_return;
     }
-    m.lna = 0;
+    m->lna = 0;
     min = 1;
 
-set_gain:
-    set_gain_model_internal(h, &m);
+do_return:
     return min;
-}
-
-int
-lime_rx_gain_dec(IO_HANDLE h)
-{
-    return gain_dec(h);
 }
 
 static void
@@ -183,11 +148,12 @@ api_init(IOM *machine)
 {
     SDR_API *api = (SDR_API *)machine->obj;
 
-    api->set_gain_model = set_gain_model;
-    api->get_gain_model = get_gain_model;
-    api->get_net_gain = get_net_gain;
-    api->gain_inc = gain_inc;
-    api->gain_dec = gain_dec;
+    api->init_gain_model = lime_rx_gain_model_init;
+    api->set_gain_model = lime_rx_set_gain_model;
+    api->get_gain_model = lime_rx_get_gain_model;
+    api->get_net_gain = lime_rx_get_net_gain;
+    api->gain_inc = lime_rx_gain_inc;
+    api->gain_dec = lime_rx_gain_dec;
 }
 
 void
@@ -242,16 +208,34 @@ lime_rx_set_ppm(IO_HANDLE h, double ppm)
 }
 
 int
-lime_rx_set_gain_model(IO_HANDLE h, BW_GAIN model)
+lime_rx_set_gain_model(IO_HANDLE h, GAIN_MODEL *model)
 {
-    set_gain_model(h, model);
+    ASSERT_LIME_MODEL(model,1);
+    struct lime_gain_model_t *m = (struct lime_gain_model_t *)model;
+
+    set_gain_model_internal(h, m);
     return 0;
 }
 
-BW_GAIN
-lime_rx_get_gain_model(IO_HANDLE h, POOL *pool)
+GAIN_MODEL *
+lime_rx_gain_model_init(POOL *pool)
 {
-    return get_gain_model(h, pool);
+    GAIN_MODEL *model = pcalloc(pool, sizeof(struct lime_gain_model_t));
+    model->type = GM_TYPE_LIME;
+    model->len = sizeof(struct lime_gain_model_t);
+    return model;
+}
+
+int
+lime_rx_get_gain_model(IO_HANDLE h, GAIN_MODEL *model)
+{
+    ASSERT_LIME_MODEL(model,1);
+    struct lime_gain_model_t *m = (struct lime_gain_model_t *)model;
+
+    if (get_gain_model_internal(h, m) != 0) {
+        return 1;
+    }
+    return 0;
 }
 
 IO_HANDLE

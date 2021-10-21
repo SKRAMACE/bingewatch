@@ -349,38 +349,40 @@ set_gain(IO_HANDLE h, void *gain)
     chan->gain = *(float *)gain;
 }
 
-static void *
-get_gain_model(IO_HANDLE h, POOL *pool)
+static int
+get_gain_model(IO_HANDLE h, GAIN_MODEL *gm)
 {
     error("get_gain_model() not implemented");
-    return NULL;
-}
-
-static void
-set_gain_model(IO_HANDLE h, void *gm)
-{
-    error("set_gain_model() not implemented");
+    return 0;
 }
 
 static int
-gain_inc(IO_HANDLE h)
+set_gain_model(IO_HANDLE h, GAIN_MODEL *gm)
+{
+    error("set_gain_model() not implemented");
+    return 0;
+}
+
+static int
+gain_inc(GAIN_MODEL *gm)
 {
     error("gain_inc() not implemented");
     return 0;
 }
 
 static int
-gain_dec(IO_HANDLE h)
+gain_dec(GAIN_MODEL *gm)
 {
     error("gain_dec() not implemented");
     return 0;
 }
 
-static float
-get_gain(IO_HANDLE h)
+static int
+get_gain(IO_HANDLE h, float *gain)
 {
     struct sdr_channel_t *chan = get_channel(h);
-    return chan->gain;
+    *gain = chan->gain;
+    return 0;
 }
 
 static void *
@@ -646,12 +648,12 @@ sdr_init_machine_functions(IOM *machine)
     machine->write = sdr_rx_write;
 }
 
-void
+int
 sdrrx_reset(IO_HANDLE h) {
     struct machine_desc_t *d = machine_get_desc(h);
     if (!d) {
         error("Sdr channel %d not found", h);
-        return;
+        return 1;
     }
 
     SDR_API *api = (SDR_API *)d->machine->obj;
@@ -660,7 +662,7 @@ sdrrx_reset(IO_HANDLE h) {
     switch (chan->state) {
     case SDR_CHAN_NOINIT:
     case SDR_CHAN_RESET:
-        return;
+        return 0;
     case SDR_CHAN_READY:
     case SDR_CHAN_ERROR:
         break;
@@ -670,11 +672,12 @@ sdrrx_reset(IO_HANDLE h) {
 
     if (api->channel_reset(chan) < IO_SUCCESS) {
         error("Failed to reset channel");
-        return;
+        return 1;
     }
 
     struct blb_rw_t *rw = (struct blb_rw_t *)chan->buffer;
     blb_rw_empty(rw);
+    return 0;
 }
 
 static void

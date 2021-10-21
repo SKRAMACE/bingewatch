@@ -20,6 +20,20 @@ static struct {
     double bandwidth;
 } defaults = {1000000000.0, 30720000.0, 30720000.0};
 
+typedef struct lime_gain_model_t {
+    struct bw_gain_model_t _gm;
+    float lna;
+    float pga;
+    float tia;
+} LIME_GAIN; 
+
+static inline int
+gains_match(GAIN_MODEL *model, float lna, float pga, float tia)
+{
+    LIME_GAIN *x = (LIME_GAIN *)model;
+    return (x->lna != lna || x->pga != pga || x->tia != tia) ? 0 : 1;
+}
+
 static inline IO_HANDLE
 lime_setup_vars(double freq, double samp_rate, double bandwidth)
 {
@@ -46,38 +60,58 @@ lime_teardown(IO_HANDLE lime)
 static int
 gain_test()
 {
+    int ret = 1;
+
     IO_HANDLE lime = lime_setup();
     POOL *pool = create_pool();
 
-    struct lime_gain_t {
-        float lna;
-        float pga;
-        float tia;
-    } model = {0,0,0};
+    GAIN_MODEL *check = lime_rx_gain_model_init(pool);
+    GAIN_MODEL *model = lime_rx_gain_model_init(pool);
+    lime_rx_set_gain_model(lime, model);
+    lime_rx_get_gain_model(lime, check);
 
-    lime_rx_set_gain_model(lime, &model);
-
-    while (lime_rx_gain_inc(lime) == 0) {
-        struct lime_gain_t *check = lime_rx_get_gain_model(lime, pool);
-
-        float g;
-        lime_rx_get_net_gain(lime, &g);
-
-        info("gain=%f, lna=%0.2f, pga=%0.2f, tia=%0.2f", g, check->lna, check->pga, check->tia);
+    if (!gains_match(check, 0, 0, 0)) {
+        error("Gain model not zeros");
+        goto do_return;
     }
 
-    while (lime_rx_gain_dec(lime) == 0) {
-        struct lime_gain_t *check = lime_rx_get_gain_model(lime, pool);
-
-        float g;
-        lime_rx_get_net_gain(lime, &g);
-
-        info("gain=%f, lna=%0.2f, pga=%0.2f, tia=%0.2f", g, check->lna, check->pga, check->tia);
+    if (lime_rx_gain_dec(model) != 1) {
+        error("Decrease below zero");
+        goto do_return;
     }
 
+    while (lime_rx_gain_inc(model) == 0) {
+        continue;
+    }
+
+    if (!gains_match(model, 30, 19, 0)) {
+        LIME_GAIN *m = (LIME_GAIN *)model;
+        error("Max mismatch: %0.2f, %0.2f, %0.2f", m->lna, m->pga, m->tia);
+        goto do_return;
+    }
+
+    LIME_GAIN *m = (LIME_GAIN *)model;
+    m->lna = 3;
+    m->pga = 6;
+    lime_rx_set_gain_model(lime, model);
+    lime_rx_get_gain_model(lime, check);
+
+    if (!gains_match(check, 3, 6, 0)) {
+        error("Gain model not set");
+        goto do_return;
+    }
+    ret = 0;
+
+    lime_rx_get_gain_model(lime, model);
+    lime_rx_get_gain_model(lime, check);
+    if (memcmp(model, check, model->len != 0)) {
+        error("Gain model memcmp failure");
+    }
+
+do_return:
     lime_teardown(lime);
     free_pool(pool);
-    return 0;
+    return ret;
 }
 
 static int

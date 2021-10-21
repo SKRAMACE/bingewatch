@@ -2,6 +2,7 @@
 #define __SDR_MACHINE_H__
 
 #include <memex.h>
+#include "sdrs.h"
 
 struct sdr_channel_t;
 struct sdr_device_t;
@@ -28,11 +29,12 @@ typedef struct sdr_api_t {
     sdr_set set_freq;
     sdr_set set_rate;
     sdr_set set_gain;
-    void *(*get_gain_model)(IO_HANDLE, POOL *);
-    void (*set_gain_model)(IO_HANDLE, void *);
-    float (*get_net_gain)(IO_HANDLE);
-    int (*gain_inc)(IO_HANDLE);
-    int (*gain_dec)(IO_HANDLE);
+    GAIN_MODEL *(*init_gain_model)(POOL *pool);
+    int (*get_gain_model)(IO_HANDLE, GAIN_MODEL *);
+    int (*set_gain_model)(IO_HANDLE, GAIN_MODEL *);
+    int (*get_net_gain)(IO_HANDLE, float *);
+    int (*gain_inc)(GAIN_MODEL *);
+    int (*gain_dec)(GAIN_MODEL *);
     void *_impl;
 } SDR_API;
 
