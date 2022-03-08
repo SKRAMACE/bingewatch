@@ -30,7 +30,6 @@ static int
 byte_count_limiter(IO_FILTER_ARGS)
 {
     IOF_DISABLED();
-    int ret = IO_ERROR;
 
     enum io_filter_direction dir = IO_FILTER_ARGS_FILTER->direction;
     struct generic_counter_t *limit = (struct generic_counter_t *)IO_FILTER_ARGS_FILTER->obj;
@@ -53,10 +52,10 @@ byte_count_limiter(IO_FILTER_ARGS)
     }
 
     if (limit->total >= limit->limit) {
-        ret = (ret == IO_SUCCESS) ? IO_COMPLETE : ret;
+        return IO_COMPLETE;
     }
 
-    return ret;
+    return IO_SUCCESS;
 }
 
 struct io_filter_t *

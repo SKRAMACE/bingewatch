@@ -250,6 +250,26 @@ create_segment_1_2(struct io_stream_t *st, IO_HANDLE in, IO_HANDLE out, IO_HANDL
 }
 
 int
+io_stream_add_src_segment(IO_STREAM h, IO_HANDLE in, IO_HANDLE out)
+{
+    // Get stream from handle
+    struct io_stream_t *st = get_stream(h);
+    if (!st) {
+        error("Stream %d not found", h);
+        return 1;
+    }
+
+    IO_HANDLE src_buf = 0;
+    IO_SEGMENT src_seg = segment_create_src(st->pool, in, &src_buf);
+    register_callbacks(st, src_seg);
+    add_segment(st, src_seg);
+
+    create_segment_1_1(st, src_buf, out);
+
+    return 0;
+}
+
+int
 io_stream_add_segment(IO_STREAM h, IO_HANDLE in, IO_HANDLE out)
 {
     // Get stream from handle

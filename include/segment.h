@@ -9,6 +9,7 @@ typedef void* IO_SEGMENT;
 void segment_register_callback_complete(IO_SEGMENT, seg_callback fn, void *arg);
 void segment_register_callback_error(IO_SEGMENT, seg_callback fn, void *arg);
 
+IO_SEGMENT segment_create_src(POOL *pool, IO_HANDLE in, IO_HANDLE *src_buf);
 IO_SEGMENT segment_create_1_1(POOL *pool, IO_HANDLE in, IO_HANDLE out);
 IO_SEGMENT segment_create_1_2(POOL *pool, IO_HANDLE in, IO_HANDLE out0, IO_HANDLE out1);
 

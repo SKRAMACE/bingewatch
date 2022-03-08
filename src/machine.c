@@ -227,7 +227,7 @@ machine_desc_read(IO_HANDLE h, void *buf, size_t *bytes)
 
     struct machine_desc_t *d = machine_get_desc(h);
     if (!d) {
-        error("Machine %d not found", h);
+        error("%s:%d: Machine %d not found", __FUNCTION__, __LINE__, h);
         goto do_return;
     }
 
@@ -286,7 +286,7 @@ machine_desc_write(IO_HANDLE h, void *buf, size_t *bytes)
 
     struct machine_desc_t *d = machine_get_desc(h);
     if (!d) {
-        error("Machine %d not found", h);
+        error("%s:%d: Machine %d not found", __FUNCTION__, __LINE__, h);
         goto do_return;
     }
 
@@ -343,7 +343,7 @@ machine_disable_read(IO_HANDLE h)
 {
     struct machine_desc_t *d = machine_get_desc(h);
     if (!d) {
-        error("Machine %d not found", h);
+        error("%s:%d: Machine %d not found", __FUNCTION__, __LINE__, h);
     } else if (!d->io_write) {
         machine_error(d, h, "io read descriptor not found");
     } else {
@@ -361,7 +361,7 @@ machine_disable_write(IO_HANDLE h)
 {
     struct machine_desc_t *d = machine_get_desc(h);
     if (!d) {
-        error("Machine %d not found", h);
+        error("%s:%d: Machine %d not found", __FUNCTION__, __LINE__, h);
     } else if (!d->io_write) {
         machine_error(d, h, "io write descriptor not found");
     } else {
@@ -379,7 +379,7 @@ machine_stop(IO_HANDLE h)
 {
     struct machine_desc_t *d = machine_get_desc(h);
     if (!d) {
-        error("Machine %d not found", h);
+        error("%s:%d: Machine %d not found", __FUNCTION__, __LINE__, h);
         return;
     }
 
@@ -426,7 +426,7 @@ machine_desc_set_write_size(IO_HANDLE h, size_t len)
 {
     struct machine_desc_t *d = machine_get_desc(h);
     if (!d) {
-        error("Machine %d not found", h);
+        error("%s:%d: Machine %d not found", __FUNCTION__, __LINE__, h);
         return;
     }
 
@@ -438,7 +438,7 @@ machine_desc_set_read_size(IO_HANDLE h, size_t len)
 {
     struct machine_desc_t *d = machine_get_desc(h);
     if (!d) {
-        error("Machine %d not found", h);
+        error("%s:%d: Machine %d not found", __FUNCTION__, __LINE__, h);
         return;
     }
 
@@ -450,7 +450,7 @@ machine_metrics(IO_HANDLE h)
 {
     struct machine_desc_t *d = machine_get_desc(h);
     if (!d) {
-        error("Machine %d not found", h);
+        error("%s:%d: Machine %d not found", __FUNCTION__, __LINE__, h);
         return NULL;
     }
 
@@ -466,7 +466,7 @@ machine_metrics_enable(IO_HANDLE h)
 
     struct machine_desc_t *d = machine_get_desc(h);
     if (!d) {
-        error("Machine %d not found", h);
+        error("%s:%d: Machine %d not found", __FUNCTION__, __LINE__, h);
         return;
     }
 

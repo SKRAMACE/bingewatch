@@ -15,6 +15,7 @@
 extern const IOM *rb_machine;
 const IOM *get_rb_machine();
 IO_HANDLE new_rb_machine();
+void rb_set_high_water_mark(IO_HANDLE h, size_t bytes);
 
 // Deprecated
 size_t rb_get_size(IO_HANDLE h);

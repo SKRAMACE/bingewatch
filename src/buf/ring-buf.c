@@ -48,12 +48,35 @@ struct ring_t {
     size_t block_align;     // Block size alignment
     size_t block_realloc;   // Number of blocks to realloc
     size_t high_water_mark; // Upper limit for bytes
+    size_t high_water_count;// Upper limit for bytes
+    size_t low_water_mark;  //
     size_t min_return_size; // If there are fewer bytes, return 0
 
     enum rb_state_e state;  // Buffer state
 };
 
 static pthread_mutex_t rb_machine_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static void
+high_water_mark_hit(struct ring_t *ring)
+{
+    critical("HIGH WATER MARK");
+    ring->high_water_count++;
+
+    double modifier = (double)ring->high_water_count;
+    double lwm = 1.0 - (.1 * modifier);
+    lwm = (lwm > 0) ? lwm : 0.1;
+    ring->low_water_mark = (size_t)(lwm * (double)ring->high_water_mark);
+}
+
+static void
+low_water_mark_hit(struct ring_t *ring)
+{
+    if (ring->bytes < ring->low_water_mark) {
+        critical("LOW WATER MARK");
+        ring->low_water_mark = 0;
+    }
+}
 
 static int
 buf_read(IO_FILTER_ARGS)
@@ -168,6 +191,62 @@ rb_data_init(struct ring_t *ring, size_t min_bytes)
     return IO_SUCCESS;
 }
 
+static int
+ring_data_init(struct ring_t *ring, size_t bytes)
+{
+    trace("First write: allocating write buffers");
+    if (rb_data_init(ring, bytes) < IO_SUCCESS) {
+        error("Failed to allocate write buffers");
+        return 1;
+    }
+    ring->state = RB_STATE_READY;
+    return 0;
+}
+
+static int
+get_next_block(struct ring_t *ring, struct __block_t **b)
+{
+    struct __block_t *_b = *b;
+
+    pthread_mutex_t *lock = &ring->_b.lock;
+    pthread_mutex_lock(lock);
+    struct __block_t *next = _b->next;
+    pthread_mutex_unlock(lock);
+
+    if (BLOCK_EMPTY(next)) {
+        *b = next;
+        return 0;
+    }
+
+    debug("Out of space: allocating more write buffers");
+
+    pthread_mutex_lock(lock);
+    ring->block_realloc *= 2;
+    size_t n_blocks = ring->block_realloc;
+    pthread_mutex_unlock(lock);
+
+    struct __block_t *add_head = block_list_alloc(ring->_b.pool, n_blocks);
+    size_t added_bytes = block_data_fastalloc(ring->_b.pool, add_head, ring->block_size);
+    if (added_bytes == 0) {
+        pfree(ring->_b.pool, add_head);
+        return 1;
+    }
+
+    struct __block_t *add_tail = add_head;
+    while (add_tail->next) {
+        add_tail = add_tail->next;
+    }
+
+    pthread_mutex_lock(lock);
+    _b->next = add_head;
+    add_tail->next = next;
+    ring->size += added_bytes;
+    *b = _b->next;
+    pthread_mutex_unlock(lock);
+
+    return 0;
+}
+
 // Write to a buffer
 static int
 buf_write(IO_FILTER_ARGS)
@@ -183,12 +262,15 @@ buf_write(IO_FILTER_ARGS)
     }
 
     if (RB_STATE_NOINIT == ring->state) {
-        trace("First write: allocating write buffers");
-        if (rb_data_init(ring, *IO_FILTER_ARGS_BYTES) < IO_SUCCESS) {
-            error("Failed to allocate write buffers");
+        if (ring_data_init(ring, *IO_FILTER_ARGS_BYTES) != 0) {
             return IO_ERROR;
         }
-        ring->state = RB_STATE_READY;
+    }
+
+    if (ring->low_water_mark) {
+        low_water_mark_hit(ring);
+        *IO_FILTER_ARGS_BYTES = 0;
+        return IO_NODATA;
     }
 
     char *data = IO_FILTER_ARGS_BUF; 
@@ -223,43 +305,18 @@ buf_write(IO_FILTER_ARGS)
 
         pthread_mutex_lock(lock);
         b->bytes = _bytes;
-        struct __block_t *next = b->next;
         pthread_mutex_unlock(lock);
 
-        // Expand the size of the ring if necessary
-        if (!BLOCK_EMPTY(next)) {
-            trace("Out of space: allocating more write buffers");
-
-            pthread_mutex_lock(lock);
-            ring->block_realloc *= 2;
-            size_t n_blocks = ring->block_realloc;
-            pthread_mutex_unlock(lock);
-
-            struct __block_t *add_head = block_list_alloc(ring->_b.pool, n_blocks);
-            size_t added_bytes = block_data_fastalloc(ring->_b.pool, add_head, ring->block_size);
-            if (added_bytes == 0) {
-                pfree(ring->_b.pool, add_head);
-                break;
-            }
-
-            struct __block_t *add_tail = add_head;
-            while (add_tail->next) {
-                add_tail = add_tail->next;
-            }
-
-            pthread_mutex_lock(lock);
-            b->next = add_head;
-            add_tail->next = next;
-            ring->size += added_bytes;
-            pthread_mutex_unlock(lock);
-        }
-
-        b = b->next;
+        get_next_block(ring, &b);
     }
 
     pthread_mutex_lock(lock);
     ring->bytes += written;
     pthread_mutex_unlock(lock);
+
+    if (ring->high_water_mark && ring->bytes >= ring->high_water_mark) {
+        high_water_mark_hit(ring);
+    }
 
     ring->wp = b;
 
@@ -397,6 +454,63 @@ new_rb_machine()
 {
     const IOM *rb_machine = get_rb_machine();
     return rb_machine->create(NULL);
+}
+
+int
+rb_acquire_write_block(IO_HANDLE h, size_t init_bytes, const struct __block_t **b)
+{
+    struct ring_t *ring = (struct ring_t *)machine_get_desc(h);
+    if (!ring) {
+        goto error_return;
+    }
+
+    if (RB_STATE_NOINIT == ring->state) {
+        size_t bytes = (init_bytes > 0) ? init_bytes : DEFAULT_BUF_BYTES;
+        if (ring_data_init(ring, bytes) != 0) {
+            goto error_return;
+        }
+    }
+
+    if (ring->low_water_mark) {
+        low_water_mark_hit(ring);
+        *b = NULL;
+        return IO_NODATA;
+    }
+
+    pthread_mutex_lock(&ring->wlock);
+    *b = (const struct __block_t *)ring->wp;
+    return IO_SUCCESS;
+
+error_return:
+    *b = NULL;
+    return IO_ERROR;
+}
+
+void
+rb_release_write_block(IO_HANDLE h, size_t bytes)
+{
+    struct ring_t *ring = (struct ring_t *)machine_get_desc(h);
+    if (!ring) {
+        return;
+    }
+
+    struct __block_t *b = ring->wp;
+    b->bytes = bytes;
+
+    get_next_block(ring, &b);
+
+    pthread_mutex_lock(&ring->_b.lock);
+    ring->bytes += bytes;
+    pthread_mutex_unlock(&ring->_b.lock);
+
+    if (ring->high_water_mark && ring->bytes >= ring->high_water_mark) {
+        high_water_mark_hit(ring);
+    }
+
+    ring->wp = b;
+
+    // Unlock writing to this buffer
+    pthread_mutex_unlock(&ring->wlock);
 }
 
 void

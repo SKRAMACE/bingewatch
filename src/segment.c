@@ -4,6 +4,7 @@
 
 #include "machine.h"
 #include "segment.h"
+#include "ring-buf.h"
 #include "bw-util.h"
 #include "stream-state.h"
 
@@ -163,7 +164,71 @@ write_to_dest(struct io_segment_t *seg, IO_DESC *dst, char *buf, size_t *bytes)
     *bytes = wr_bytes;
 }
 
-void *
+static void *
+segment_run_source(void *arg)
+{
+    /* Arg management */
+    struct io_segment_t *seg = (struct io_segment_t *)arg;
+    IO_DESC *src = machine_get_desc(seg->in);
+    IO_DESC *rb = machine_get_desc(seg->out);
+
+    size_t buflen = (src->io_read->size > rb->io_write->size) ?
+        src->io_read->size : rb->io_write->size;
+
+    //if (0 == buflen) {
+    //    buflen = seg->default_buf_len;
+    //}
+
+    seg_trace(seg, "Starting segment source");
+
+    seg->running = 1;
+    while (seg->running) {
+        enum stream_state_e state = *seg->state;
+        if (STREAM_READY == state) {
+            continue;
+        }
+
+        if (seg->do_complete) {
+            SEGMENT_COMPLETE(seg);
+            stop_segment(seg);
+            continue;
+        }
+
+        if (!STREAM_IS_RUNNING(state)) {
+            seg_trace(seg, "Stream stopped");
+            seg->running = 0;
+            continue;
+        }
+
+        const struct __block_t *b;
+        if (rb_acquire_write_block(seg->out, buflen, &b) < 0) {
+            seg_error(seg, "Write error (%d)", IO_ERROR);
+            SEGMENT_ERROR(seg);
+            stop_segment(seg);
+            goto no_data;
+        }
+
+        if (!b) {
+            goto no_data;
+        }
+
+        size_t bytes = b->size;
+        read_from_source(seg, src, b->data, &bytes);
+        rb_release_write_block(seg->out, bytes);
+
+        if (bytes == 0) {
+            goto no_data;
+        }
+        continue;
+
+    no_data:
+        usleep(1000);
+    }
+
+    pthread_exit(NULL);
+}
+
+static void *
 segment_run(void *arg)
 {
     /* Arg management */
@@ -303,6 +368,19 @@ IO_SEGMENT
 segment_create_1_2(POOL *pool, IO_HANDLE in, IO_HANDLE out0, IO_HANDLE out1)
 {
     return segment_create(pool, in, out0, out1);
+}
+
+IO_SEGMENT
+segment_create_src(POOL *pool, IO_HANDLE src, IO_HANDLE *buf)
+{
+    IO_HANDLE src_buf = new_rb_machine();
+
+    IO_SEGMENT seg = segment_create(pool, src, src_buf, 0);
+    struct io_segment_t *s = (struct io_segment_t *)seg;
+    s->fn = segment_run_source;
+
+    *buf = src_buf;
+    return seg;
 }
 
 void

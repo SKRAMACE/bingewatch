@@ -124,7 +124,10 @@ stream-test: $(TEST) stream.c segment.c file-machine.c $(FILTERS) $(BUF)
 sock-test: $(TEST) socket-machine.c
 	$(CC) $(TEST_CFLAGS) test/sock-test.c $^ $(INC) -o test/bin/sock-test $(TESTLIBS)
 
-lime-test: $(TEST) $(SRC) sdr-rx-machine.c soapy-machine.c lime-machine.c
+lime-test: $(TEST) $(SRC) test/lime-common.c sdr-rx-machine.c soapy-machine.c lime-machine.c
+	$(CC) $(TEST_CFLAGS) test/$@.c $^ $(INC) -o test/bin/$@ $(TESTLIBS) $(SDRLIBS)
+
+lime-benchmark-test: $(TEST) $(SRC) test/lime-common.c sdr-rx-machine.c soapy-machine.c lime-machine.c
 	$(CC) $(TEST_CFLAGS) test/$@.c $^ $(INC) -o test/bin/$@ $(TESTLIBS) $(SDRLIBS)
 
 b210-test: $(TEST) $(SRC) sdr-rx-machine.c uhd-machine.c b210-machine.c
