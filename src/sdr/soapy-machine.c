@@ -400,8 +400,8 @@ create_channel(POOL *p, struct sdr_device_t *dev, void *args)
 {
     struct soapy_channel_t *chan = (struct soapy_channel_t *)pcalloc(p, sizeof(struct soapy_channel_t));
 
-    if (SoapySDRDevice_setupStream(dev->hw, &chan->rx, SOAPY_SDR_RX, SOAPY_SDR_CF32,
-            NULL, 0, NULL) != 0)
+    chan->rx = SoapySDRDevice_setupStream(dev->hw, SOAPY_SDR_RX, SOAPY_SDR_CF32, &chan->chan, 1, NULL);
+    if (!chan->rx)
     {
         error("setupStream fail: %s", SoapySDRDevice_lastError());
         return NULL;

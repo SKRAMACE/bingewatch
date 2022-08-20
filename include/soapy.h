@@ -21,6 +21,7 @@ struct soapy_channel_t {
     float pga_gain;
     double expected_timestamp;
     double ns_per_sample;
+    size_t chan;
 };
 
 struct soapy_channel_t * soapy_get_channel(IO_HANDLE h);
