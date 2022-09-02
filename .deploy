@@ -1,0 +1,19 @@
+#!/bin/bash
+
+NAME=bingewatch
+
+deploy_list=(\
+    "include" \
+    "install" \
+    "Makefile" \
+    "README.md" \
+    ".bw-version" \
+    "src" \
+    "tools.mk"
+)
+
+exclude_list=(\
+    "$0" \
+    "*.swp" \
+    "*.swo"
+)

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-. .version
+. .bw-version
 
 ROOT=/usr/local
 LIB=$ROOT/lib
