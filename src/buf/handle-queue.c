@@ -92,7 +92,7 @@ queue_read(IO_FILTER_ARGS)
         return IO_SUCCESS;
 
     // If no data, and buffer is set to "flush" disable the buffer
-    } else if (d->flush) {
+    } else if (q->flush) {
         io_desc_set_state(d, d->io_read, IO_DESC_DISABLING);
         return IO_COMPLETE;
 
