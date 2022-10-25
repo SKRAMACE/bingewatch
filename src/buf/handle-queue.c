@@ -93,6 +93,7 @@ queue_read(IO_FILTER_ARGS)
 
     memcpy(data, &e, sizeof(HQ_ENTRY));
     *IO_FILTER_ARGS_BYTES = sizeof(HQ_ENTRY);
+    return IO_SUCCESS;
 }
 
 static IO_HANDLE
