@@ -85,15 +85,22 @@ queue_read(IO_FILTER_ARGS)
         return IO_ERROR;
     }
 
-    // Empty list
-    if (N == 0) {
+    // Always return data
+    if (N > 0) {
+        memcpy(data, &e, sizeof(HQ_ENTRY));
+        *IO_FILTER_ARGS_BYTES = sizeof(HQ_ENTRY);
+        return IO_SUCCESS;
+
+    // If no data, and buffer is set to "flush" disable the buffer
+    } else if (d->flush) {
+        io_desc_set_state(d, d->io_read, IO_DESC_DISABLING);
+        return IO_COMPLETE;
+
+    // If there is no data during normal operation, successfully return 0 bytes
+    } else {
         *IO_FILTER_ARGS_BYTES = 0;
         return IO_SUCCESS;
     }
-
-    memcpy(data, &e, sizeof(HQ_ENTRY));
-    *IO_FILTER_ARGS_BYTES = sizeof(HQ_ENTRY);
-    return IO_SUCCESS;
 }
 
 static IO_HANDLE
