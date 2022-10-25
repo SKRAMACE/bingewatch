@@ -19,7 +19,7 @@ includedir = $(prefix)/include
 # Where to put header files
 libdir = $(exec_prefix)/lib
 
-INC = -I./include
+INC = -I./include -I/usr/local/include
 SRC_DIR = src
 OUT_DIR = .
 VPATH= \
@@ -48,9 +48,10 @@ TEST_CFLAGS=\
 .PHONY: install clean uninstall all uhd soapy
 
 TESTLIBS = \
+	-ltestex \
+    -luuid \
     -lmemex \
     -lpthread \
-    -luuid \
 
 SDRLIBS = \
     -lSoapySDR \
@@ -60,6 +61,7 @@ BUF = \
 	block-list-buf.c \
 	ring-buf.c \
 	fixed-block-buf.c \
+	handle-queue.c \
 
 SDR = \
     sdr-rx-machine.c \
@@ -112,8 +114,11 @@ libbingewatch_rtlsdr: $(LIB) rtlsdr-machine.c
 %.o: %.c
 	$(CC) $(CFLAGS) $(INC) -I/usc/local/include -Werror -ggdb -c $^
 
-ring-buffer-test: $(TEST) $(BUF)
+ring-buffer-test: $(TEST) $(BUF) stream.c segment.c
 	$(CC) $(TEST_CFLAGS) test/ring-buffer-test.c $^ $(INC) -o test/bin/$@ $(TESTLIBS)
+
+handle-queue-test: $(TEST) handle-queue.c $(SRC)
+	$(CC) $(TEST_CFLAGS) test/handle-queue-test.c $^ $(INC) -o test/bin/$@ $(TESTLIBS)
 
 file-test: $(TEST) file-machine.c null-machine.c
 	$(CC) $(TEST_CFLAGS) test/file-test.c $^ $(INC) -o test/bin/file-test $(TESTLIBS)
@@ -132,6 +137,8 @@ lime-benchmark-test: $(TEST) $(SRC) test/lime-common.c sdr-rx-machine.c soapy-ma
 
 b210-test: $(TEST) $(SRC) sdr-rx-machine.c uhd-machine.c b210-machine.c
 	$(CC) $(TEST_CFLAGS) test/$@.c $^ $(INC) -o test/bin/$@ $(TESTLIBS) $(SDRLIBS)
+
+buffer-test: ring-buffer-test
 
 tests: buffer-test file-test stream-test
 
