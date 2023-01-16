@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <stdint.h>
@@ -6,6 +7,7 @@
 #include <string.h>
 #include <inttypes.h>
 #include <pthread.h>
+#include <fcntl.h>
 
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -30,6 +32,9 @@ struct fifo_desc_t {
     // File
     FILE *fr;
     FILE *fw;
+
+    // For "open"
+    int f;
 };
 
 static inline void
@@ -52,7 +57,29 @@ set_input_str(POOL *p, char *src, char **dst)
 }
 
 static int
-open_fifo(struct fifo_desc_t *fd, uint32_t rw)
+open_fifo(struct fifo_desc_t *fd)
+{
+    if (fd->f) {
+        goto do_return;
+    }
+
+    int f = open(fd->fname, O_RDWR);
+    if (f < 0) {
+        printf("ERROR: Failed to open fifo %s: %s\n", fd->fname, strerror(errno));
+        goto do_return;
+    }
+
+    if (f == 0) {
+        printf("%s:%d: Ignoring file ID == 0: FIX THIS NOW!!!", __FUNCTION__, __LINE__);
+    }
+    fd->f = f;
+
+do_return:
+    return fd->f;
+}
+
+static int
+open_fifo_bak(struct fifo_desc_t *fd, uint32_t rw)
 {
     // Select fifo descriptor
     FILE *f = NULL;
@@ -117,19 +144,22 @@ fifo_write(IO_FILTER_ARGS)
         return IO_ERROR;
     }
 
+    #if 0
     if (!(fd->flags & FFIFO_WRITE)) {
         printf("File IOM %d is not set to \"write\" mode\n", *handle);
 
         *IO_FILTER_ARGS_BYTES = 0;
         return IO_ERROR;
     }
+    #endif
 
     // Lock for fifo management
     pthread_mutex_t *lock = &fd->_d.lock;
     pthread_mutex_lock(lock);
 
     // Check if fifo is open
-    if (open_fifo(fd, FFIFO_WRITE) == 1) {
+    int f = open_fifo(fd);
+    if (f == 0) {
         pthread_mutex_unlock(lock);
         return IO_ERROR;
     }
@@ -140,12 +170,13 @@ fifo_write(IO_FILTER_ARGS)
     char *ptr = IO_FILTER_ARGS_BUF;
 
     while (remaining) {
-        size_t b = fwrite(ptr, 1, remaining, fd->fw);
+        //size_t b = fwrite(ptr, 1, remaining, fd->fw);
+        size_t b = write(f, ptr, remaining);
         remaining -= b;
         ptr += b;
         total += b;
     }
-    fflush(fd->fw);
+    //fflush(fd->fw);
 
     pthread_mutex_unlock(lock);
 
@@ -166,19 +197,22 @@ fifo_read(IO_FILTER_ARGS)
         return IO_ERROR;
     }
 
+    #if 0
     if (!(fd->flags & FFIFO_READ)) {
         printf("File IOM %d is not set to \"read\" mode\n", *handle);
 
         *IO_FILTER_ARGS_BYTES = 0;
         return IO_ERROR;
     }
+    #endif
 
     // Lock for fifo management
     pthread_mutex_t *lock = &fd->_d.lock;
     pthread_mutex_lock(lock);
 
     // Check if fifo is open
-    if (open_fifo(fd, FFIFO_READ) == 1) {
+    int f = open_fifo(fd);
+    if (f == 0) {
         pthread_mutex_unlock(lock);
         return IO_ERROR;
     }
@@ -190,19 +224,19 @@ fifo_read(IO_FILTER_ARGS)
     char *ptr = IO_FILTER_ARGS_BUF;
 
     while (remaining) {
-        size_t b = fread(ptr, 1, remaining, fd->fr);
-        if (b == 0) {
-            int ret = IO_ERROR;
-            int eof = feof(fd->fr);
-            int err = ferror(fd->fr);
-            if (eof) {
-                *IO_FILTER_ARGS_BYTES = total;
-                ret = IO_COMPLETE;
-            } else if (err) {
-                printf("File Error: %d\n", err);
-            }
+        //size_t b = fread(ptr, 1, remaining, fd->fr);
+        size_t b = read(f, ptr, remaining);
+        if (b < 1) {
             pthread_mutex_unlock(lock);
-            return ret;
+            printf("File Error\n");
+            *IO_FILTER_ARGS_BYTES = 0;
+            return IO_ERROR;
+        }
+
+        if (b == 0) {
+            pthread_mutex_unlock(lock);
+            *IO_FILTER_ARGS_BYTES = total;
+            return IO_COMPLETE;
         }
 
         remaining -= b;
