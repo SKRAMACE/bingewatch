@@ -223,29 +223,16 @@ fifo_read(IO_FILTER_ARGS)
     size_t total = 0;
     char *ptr = IO_FILTER_ARGS_BUF;
 
-    while (remaining) {
-        //size_t b = fread(ptr, 1, remaining, fd->fr);
-        size_t b = read(f, ptr, remaining);
-        if (b < 1) {
-            pthread_mutex_unlock(lock);
-            printf("File Error\n");
-            *IO_FILTER_ARGS_BYTES = 0;
-            return IO_ERROR;
-        }
-
-        if (b == 0) {
-            pthread_mutex_unlock(lock);
-            *IO_FILTER_ARGS_BYTES = total;
-            return IO_COMPLETE;
-        }
-
-        remaining -= b;
-        ptr += b;
-        total += b;
+    size_t b = read(f, ptr, remaining);
+    if (b < 1) {
+        pthread_mutex_unlock(lock);
+        printf("File Error\n");
+        *IO_FILTER_ARGS_BYTES = 0;
+        return IO_ERROR;
     }
 
     pthread_mutex_unlock(lock);
-    *IO_FILTER_ARGS_BYTES = total;
+    *IO_FILTER_ARGS_BYTES = b;
     return IO_SUCCESS;
 }
 
